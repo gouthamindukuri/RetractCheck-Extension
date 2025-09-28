@@ -1,0 +1,20 @@
+{
+  "name": "@retractcheck/doi",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./normalize": "./src/normalize.ts",
+    "./extract": "./src/extract.ts",
+    "./constants": "./src/constants.ts"
+  },
+  "devDependencies": {
+    "happy-dom": "^18.0.1",
+    "vitest": "^3.2.4"
+  }
+}
+

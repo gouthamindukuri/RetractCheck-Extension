@@ -1,0 +1,21 @@
+{
+  "name": "retractcheck",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "bun@1.2.22",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "format": "turbo run format",
+    "clean": "turbo run clean",
+    "package": "turbo run package"
+  },
+  "devDependencies": {
+    "bestzip": "^2.2.1",
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.2"
+  }
+}

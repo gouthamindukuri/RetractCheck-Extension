@@ -1,0 +1,53 @@
+# dependencies
+node_modules
+
+# build output
+dist
+out
+*.tgz
+
+# logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# coverage
+coverage
+*.lcov
+.nyc_output/
+
+# env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+.history/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# extension packaging
+*.pem         # Chrome packing key (DO NOT COMMIT)
+*.crx         # Packed extension bundle
+*.zip         # Packed archives
+web-ext-artifacts/  # Firefox web-ext output
+
+# CI/build reports
+report.*.json
+
+# misc
+CLAUDE.md
+bun.lock*

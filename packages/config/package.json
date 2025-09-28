@@ -1,0 +1,26 @@
+{
+  "name": "@retractcheck/config",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "exports": {
+    "./eslint": "./eslint.config.js",
+    "./eslint.config.js": "./eslint.config.js",
+    "./tsconfig": "./tsconfig.json",
+    "./tsconfig.json": "./tsconfig.json"
+  },
+  "peerDependencies": {
+    "@eslint/js": "^9.13.0",
+    "eslint": "^9.13.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "globals": "^16.4.0",
+    "typescript-eslint": "^8.8.1"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

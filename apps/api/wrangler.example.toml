@@ -1,0 +1,17 @@
+name = "retractcheck-worker"
+main = "src/index.ts"
+compatibility_date = "2024-12-15"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+API_VERSION = "v1"
+
+[[kv_namespaces]]
+binding = "RETRACTCHECK_CACHE"
+id = "<your-kv-namespace-id>"
+
+[[d1_databases]]
+binding = "RETRACTCHECK_DB"
+database_name = "<your-d1-database-name>"
+database_id = "<your-d1-database-id>"
+
