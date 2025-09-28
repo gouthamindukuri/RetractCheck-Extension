@@ -4,7 +4,7 @@ RetractCheck is a browser extension that extracts the DOI from the page you are 
 
 - **Chrome / Chromium** builds target Manifest V3 with a service-worker background script.
 - **Firefox** builds include a fallback background script until Manifest V3 service workers are fully enabled.
-- The supported-host allow list is forked from the [PubPeer browser extension](https://github.com/PubPeerFoundation/pubpeer-chrome-extension). Open an issue if we are missing a venue you rely on.
+- The supported-host allow list is forked from the [PubPeer browser extension](https://github.com/PubPeerFoundation/PubPeerBrowserExtensions/tree/master). Open an issue if we are missing a venue you rely on.
 
 ## Getting Started
 
