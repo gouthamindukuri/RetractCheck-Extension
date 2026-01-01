@@ -1,19 +1,40 @@
+# Dependencies
 node_modules
 **/node_modules
+
+# Build outputs
 **/dist
-.DS_Store
+*.zip
+*.xpi
+
+# Lock files
 bun.lock
-.turbo
-plan.md
-apps/api/.dev.vars
-apps/api/fixtures/
 **/bun.lock
 **/package-lock.json
 **/yarn.lock
 **/pnpm-lock.yaml
 **/pnpm-workspace.yaml
-**/pnpm-lock.yaml
-**/pnpm-workspace.yaml
-AGENTS.md
+
+# Environment variables (keep .example files)
+.env
+.env.local
+
+# Wrangler / Cloudflare
+apps/api/wrangler.toml
+apps/api/.dev.vars
+apps/api/fixtures/
 .wrangler/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Turbo
+.turbo
+
+# Temp files
 tmp/
+*.tmp
