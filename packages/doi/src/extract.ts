@@ -22,14 +22,33 @@ function fromMeta(doc: Document = document): string | null {
   return null;
 }
 
+// JSON-LD types for scholarly article metadata
+type JsonLdValue = string | number | boolean | null | JsonLdObject | JsonLdValue[];
+type JsonLdObject = { [key: string]: JsonLdValue };
+
+type JsonLdIdentifier = string | {
+  propertyID?: string;
+  propertyId?: string;
+  '@type'?: string;
+  value?: string;
+  id?: string;
+  '@id'?: string;
+};
+
+type JsonLdItem = JsonLdObject & {
+  identifier?: JsonLdIdentifier | JsonLdIdentifier[];
+  '@graph'?: JsonLdItem[];
+};
+
 function fromJsonLd(doc: Document = document): string | null {
   for (const s of doc.querySelectorAll('script[type="application/ld+json"]')) {
     try {
-      const data = JSON.parse(s.textContent || 'null');
-      const items = Array.isArray(data) ? data : data?.['@graph'] || [data];
+      const data = JSON.parse(s.textContent || 'null') as JsonLdItem | JsonLdItem[] | null;
+      if (!data) continue;
+      const items: JsonLdItem[] = Array.isArray(data) ? data : data['@graph'] || [data];
       for (const it of items) {
         if (!it || typeof it !== 'object') continue;
-        const take = (v: any): string | null => {
+        const take = (v: JsonLdIdentifier | undefined): string | null => {
           if (typeof v === 'string') return cleanDoi(v);
           if (v && typeof v === 'object') {
             const pid = String(v.propertyID || v.propertyId || v['@type'] || '').toLowerCase();
@@ -37,11 +56,11 @@ function fromJsonLd(doc: Document = document): string | null {
           }
           return null;
         };
-        let d = take((it as any).identifier);
+        const identifier = it.identifier;
+        let d = take(identifier as JsonLdIdentifier | undefined);
         if (d) return d;
-        const id = (it as any).identifier;
-        if (Array.isArray(id)) {
-          for (const v of id) {
+        if (Array.isArray(identifier)) {
+          for (const v of identifier) {
             d = take(v);
             if (d) return d;
           }
