@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "RetractCheck",
+  "version": "0.1.0",
+  "description": "Extracts the DOI from article pages and checks against the Retraction Watch database.",
+  "homepage_url": "https://github.com/gouthamindukuri/RetractCheck-Extension",
+  "action": { "default_title": "RetractCheck", "default_popup": "popup.html" },
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}
