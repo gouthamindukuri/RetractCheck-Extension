@@ -7,4 +7,6 @@ export interface Env {
   RETRACTCHECK_SOURCE_URL?: string;
   INGEST_TOKEN?: string;
   RATE_LIMIT_CONFIG?: string;
+  /** Healthchecks.io ping URL for ingest monitoring (e.g., https://hc-ping.com/your-uuid) */
+  HEALTHCHECK_PING_URL?: string;
 }
