@@ -16,7 +16,14 @@ function makeEnv(overrides: Partial<Record<string, any>> = {}) {
     RETRACTCHECK_CACHE: {
       async get(key: string) {
         if (key === 'ingest:metadata') {
-          return JSON.stringify({ checksum: 'abc', updatedAt: '2025-01-01T00:00:00.000Z' });
+          return JSON.stringify({
+            tableName: 'entries_20250101000000',
+            rowCount: 1000,
+            updatedAt: '2025-01-01T00:00:00.000Z'
+          });
+        }
+        if (key === 'ingest:active_table') {
+          return 'entries_20250101000000';
         }
         return cacheStore.get(key) ?? null;
       },
@@ -43,7 +50,8 @@ describe('status handler', () => {
     expect(response.status).toBe(200);
     const json = await response.json();
     expect(json.records).toHaveLength(1);
-    expect(json.meta.datasetVersion).toBe('abc');
+    expect(json.meta.datasetVersion).toBe('entries_20250101000000');
+    expect(json.meta.updatedAt).toBe('2025-01-01T00:00:00.000Z');
   });
 
   it('returns empty payload for missing DOI', async () => {
