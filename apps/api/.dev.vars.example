@@ -1,0 +1,6 @@
+# Local development variables
+# Copy to .dev.vars and fill in your values
+
+INGEST_TOKEN=your-secure-token-here
+# HEALTHCHECK_PING_URL=https://hc-ping.com/your-uuid
+# RETRACTCHECK_SOURCE_URL=https://example.com/custom-source.csv
