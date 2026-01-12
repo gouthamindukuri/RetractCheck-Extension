@@ -15,3 +15,11 @@ binding = "RETRACTCHECK_DB"
 database_name = "<your-d1-database-name>"
 database_id = "<your-d1-database-id>"
 
+[triggers]
+crons = ["0 2 * * *"]
+
+# Secrets (set via `wrangler secret put <NAME>`):
+#   INGEST_TOKEN           - Bearer token for POST /v1/ingest
+#   HEALTHCHECK_PING_URL   - Healthchecks.io ping URL (optional)
+#   RETRACTCHECK_SOURCE_URL - Override CSV source URL (optional)
+#   RATE_LIMIT_CONFIG      - JSON rate limit config (optional)
