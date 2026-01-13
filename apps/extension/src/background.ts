@@ -1,5 +1,7 @@
 import type { RetractionStatusResponse } from '@retractcheck/types';
 
+import { OVERRIDES_KEY } from './constants';
+
 const globalScope = globalThis as typeof globalThis & {
   browser?: typeof chrome;
   chrome?: typeof chrome;
@@ -17,7 +19,6 @@ declare const __WORKER_ENDPOINT__: string;
 
 const STORAGE_KEY = 'retractcheck:settings';
 const CACHE_KEY = 'retractcheck:cache';
-const OVERRIDES_KEY = 'retractcheck:overrides';
 const CLIENT_ID_KEY = 'retractcheck:client-id';
 const RATE_LIMIT_KEY = 'retractcheck:rate-limit';
 type RateLimitType = 'status' | 'override';
@@ -205,7 +206,8 @@ async function handleQuery(
   const cache = await getCache();
   const cached = cache[doi];
   if (cached && !isExpired(cached)) {
-    await updateRateLimit('status');
+    // Return cached response without incrementing rate limit
+    // (rate limit should only count actual API calls)
     const response = {
       doi,
       meta: cached.meta ?? {},
@@ -534,9 +536,18 @@ async function processPageDoiMessage(
       if (error.type === 'status') {
         await clearBadge(tabId);
       }
-    } else {
-      console.warn('[RetractCheck] page-doi query failed', error);
-      await clearBadge(tabId);
+      // Rate limit errors are expected, no need to log
+      return;
     }
+
+    // Log actual errors with context for debugging
+    console.error('[RetractCheck] page-doi query failed', {
+      doi: doi || '(empty)',
+      host: host || '(unknown)',
+      tabId,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    await clearBadge(tabId);
   }
 }
