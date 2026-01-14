@@ -1,8 +1,7 @@
 import { extractPrimaryDoi } from '@retractcheck/doi';
 
+import { OVERRIDES_KEY } from './constants';
 import { shouldActivate, hookSpaNavigation, isSupportedLocation } from './gate';
-
-const OVERRIDES_KEY = 'retractcheck:overrides';
 
 declare global {
   interface Window {
@@ -13,6 +12,7 @@ declare global {
 }
 
 let lastUrl = '';
+let runDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function run(force = false) {
   const host = location.hostname?.toLowerCase() ?? '';
@@ -45,19 +45,31 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 run(true);
 
-hookSpaNavigation(() => {
-  clearTimeout((run as any)._t);
-  (run as any)._t = setTimeout(() => {
+// Hook SPA navigation and store cleanup function
+const cleanupSpaHook = hookSpaNavigation(() => {
+  if (runDebounceTimer) clearTimeout(runDebounceTimer);
+  runDebounceTimer = setTimeout(() => {
+    runDebounceTimer = null;
     void run(true);
   }, 200);
 });
 
 window.addEventListener('pageshow', () => {
   lastUrl = '';
-  clearTimeout((run as any)._t);
-  (run as any)._t = setTimeout(() => {
+  if (runDebounceTimer) clearTimeout(runDebounceTimer);
+  runDebounceTimer = setTimeout(() => {
+    runDebounceTimer = null;
     void run(true);
   }, 0);
+});
+
+// Cleanup on page unload (good practice, though content scripts are destroyed anyway)
+window.addEventListener('pagehide', () => {
+  cleanupSpaHook();
+  if (runDebounceTimer) {
+    clearTimeout(runDebounceTimer);
+    runDebounceTimer = null;
+  }
 });
 
 chrome.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
