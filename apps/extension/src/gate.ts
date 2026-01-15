@@ -1,8 +1,6 @@
 import Domains from './domains';
 
-const DOMAIN_LIB = Domains as any;
-
-const DOMAIN_SET = new Set(DOMAIN_LIB.getDomainList().map((d: string) => d.toLowerCase()));
+const DOMAIN_SET = new Set(Domains.getDomainList().map((d) => d.toLowerCase()));
 
 const PATH_HINTS = [/\/doi\//i, /\/article\//i, /\/journals?\//i, /\/content\//i];
 
@@ -12,7 +10,7 @@ export function inHostAllowList(u: Location = location): boolean {
 
 export function isSupportedLocation(u: Location = location): boolean {
   const href = u.href || `${u.protocol}//${u.host}${u.pathname}${u.search || ''}`;
-  if (href && DOMAIN_LIB.validate(href)) return true;
+  if (href && Domains.validate(href)) return true;
 
   const host = u.hostname.toLowerCase();
   if (DOMAIN_SET.has(host)) return true;
@@ -49,27 +47,59 @@ export function shouldActivate(doc: Document = document): boolean {
   return pathLikely || looksArticleLike(doc);
 }
 
-export function hookSpaNavigation(onChange: () => void): void {
+type CleanupFunction = () => void;
+
+export function hookSpaNavigation(onChange: () => void): CleanupFunction {
   const fire = () => onChange();
   const ev = new Event('retractcheck:locationchange');
   const push = history.pushState.bind(history) as History['pushState'];
   const rep = history.replaceState.bind(history) as History['replaceState'];
+
   history.pushState = ((...args: Parameters<History['pushState']>) => {
     const r = push(...args);
     window.dispatchEvent(ev);
     return r;
   }) as History['pushState'];
+
   history.replaceState = ((...args: Parameters<History['replaceState']>) => {
     const r = rep(...args);
     window.dispatchEvent(ev);
     return r;
   }) as History['replaceState'];
+
   window.addEventListener('popstate', fire);
   window.addEventListener('retractcheck:locationchange', fire);
-  new MutationObserver(() => onChange()).observe(document.documentElement, {
+
+  // Debounced MutationObserver to avoid excessive callback invocations
+  let mutationTimeout: ReturnType<typeof setTimeout> | null = null;
+  const debouncedOnChange = () => {
+    if (mutationTimeout) return;
+    mutationTimeout = setTimeout(() => {
+      mutationTimeout = null;
+      onChange();
+    }, 100);
+  };
+
+  // Watch for relevant DOM changes (meta tags, canonical links, JSON-LD scripts)
+  // Using a more targeted approach than watching the entire subtree
+  const observer = new MutationObserver(debouncedOnChange);
+  observer.observe(document.head || document.documentElement, {
     subtree: true,
     childList: true,
     attributes: true,
-    attributeFilter: ['href', 'content'],
+    attributeFilter: ['href', 'content', 'rel', 'name'],
   });
+
+  // Return cleanup function to disconnect observer and remove listeners
+  return () => {
+    observer.disconnect();
+    if (mutationTimeout) {
+      clearTimeout(mutationTimeout);
+      mutationTimeout = null;
+    }
+    window.removeEventListener('popstate', fire);
+    window.removeEventListener('retractcheck:locationchange', fire);
+    // Note: We intentionally don't restore history.pushState/replaceState
+    // as other code may depend on the wrapped versions
+  };
 }
