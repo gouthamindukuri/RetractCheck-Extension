@@ -1,6 +1,8 @@
 import './popup.css';
 import type { RetractionStatusResponse } from '@retractcheck/types';
 
+import { SITE_REQUEST_URL } from './constants';
+
 type Settings = {
   remoteEnabled: boolean;
 };
@@ -24,9 +26,6 @@ type PopupState = {
   host?: string;
   url?: string;
 };
-
-const SITE_REQUEST_URL =
-  'https://github.com/gouthamindukuri/RetractCheck-Extension/issues/new?title=Site%20support%20request';
 
 const toggleEl = document.getElementById('toggle') as HTMLInputElement;
 const doiTextEl = document.getElementById('doi-text') as HTMLElement;
@@ -210,10 +209,28 @@ function appendField(dl: HTMLDListElement, label: string, value?: string | HTMLE
 
 function hyperlink(value?: string, prefix = ''): HTMLElement | null {
   if (!value || value.trim() === '' || /unavailable/i.test(value)) return null;
+
+  const rawUrl = prefix ? `${prefix}${value.trim()}` : value.trim();
+
+  // Validate URL has safe protocol (defense in depth)
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    // Invalid URL - don't create a link
+    return null;
+  }
+
+  // Only allow http and https protocols
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    console.warn('[RetractCheck] Blocked unsafe URL protocol:', url.protocol);
+    return null;
+  }
+
   const a = document.createElement('a');
-  a.href = prefix ? `${prefix}${value}` : value;
+  a.href = url.href;
   a.target = '_blank';
-  a.rel = 'noreferrer';
+  a.rel = 'noreferrer noopener';
   a.textContent = value;
   return a;
 }
@@ -393,13 +410,23 @@ async function getActiveTabContext(
   }
 
   try {
+    // Execute in MAIN world to access content script's window properties
+    // Type assertion needed since these globals are set by content.ts
+    type RetractCheckWindow = Window & {
+      __RETRACTCHECK_DOI?: string | null;
+      __RETRACTCHECK_SUPPORTED?: boolean;
+      __RETRACTCHECK_HOST?: string | null;
+    };
     const results = await chrome.scripting.executeScript({
       target: { tabId },
-      func: () => ({
-        doi: (window as any).__RETRACTCHECK_DOI || null,
-        supported: (window as any).__RETRACTCHECK_SUPPORTED !== false,
-        host: (window as any).__RETRACTCHECK_HOST || null,
-      }),
+      func: () => {
+        const w = window as RetractCheckWindow;
+        return {
+          doi: w.__RETRACTCHECK_DOI ?? null,
+          supported: w.__RETRACTCHECK_SUPPORTED !== false,
+          host: w.__RETRACTCHECK_HOST ?? null,
+        };
+      },
       world: 'MAIN',
     });
     const fallback = results[0]?.result as { doi: string | null; supported?: boolean; host?: string } | undefined;
