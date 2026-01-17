@@ -1,10 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["RETRACTCHECK_WORKER_URL"],
   "tasks": {
     "build": {
       "cache": true,
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**"],
+      "env": ["RETRACTCHECK_WORKER_URL"]
     },
     "dev": {
       "cache": false,
@@ -16,7 +18,8 @@
     "clean": { "cache": false },
     "package": {
       "cache": false,
-      "dependsOn": ["build"]
+      "dependsOn": ["build"],
+      "env": ["RETRACTCHECK_WORKER_URL"]
     }
   }
 }
