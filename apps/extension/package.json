@@ -13,7 +13,8 @@
     "clean": "shx rm -rf dist",
     "package:chrome": "bun run build && cd dist && ../../../node_modules/.bin/bestzip ../RetractCheck-chrome.zip . && cd -",
     "package:firefox": "bun run build && shx cp public/manifest.firefox.json dist/manifest.json && cd dist && ../../../node_modules/.bin/bestzip ../RetractCheck-firefox.xpi . && cd - && shx cp public/manifest.json dist/manifest.json",
-    "package": "bun run package:chrome && bun run package:firefox"
+    "package:edge": "bun run build && shx cp public/manifest.edge.json dist/manifest.json && cd dist && ../../../node_modules/.bin/bestzip ../RetractCheck-edge.zip . && cd - && shx cp public/manifest.json dist/manifest.json",
+    "package": "bun run package:chrome && bun run package:firefox && bun run package:edge"
   },
   "dependencies": {
     "@retractcheck/doi": "workspace:*",
