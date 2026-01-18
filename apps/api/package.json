@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --local",
-    "build": "wrangler deploy --dry-run",
+    "build": "[ -f wrangler.toml ] && wrangler deploy --dry-run || echo 'Skipping build: wrangler.toml not found (copy wrangler.example.toml and configure)'",
+    "deploy": "wrangler deploy",
+    "deploy:dry-run": "wrangler deploy --dry-run",
     "lint": "eslint src",
     "format": "prettier -w src",
     "clean": "rm -rf dist",
