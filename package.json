@@ -11,7 +11,11 @@
     "test": "turbo run test",
     "format": "turbo run format",
     "clean": "turbo run clean",
-    "package": "turbo run package"
+    "package": "turbo run package",
+    "version": "bun scripts/bump-version.ts",
+    "version:patch": "bun scripts/bump-version.ts patch",
+    "version:minor": "bun scripts/bump-version.ts minor",
+    "version:major": "bun scripts/bump-version.ts major"
   },
   "devDependencies": {
     "bestzip": "^2.2.1",
