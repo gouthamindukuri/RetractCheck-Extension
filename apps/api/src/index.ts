@@ -80,18 +80,37 @@ interface RateLimitConfig {
   override: RateLimitEntry;
 }
 
-const DEFAULT_RATE_LIMITS: RateLimitConfig = {
+// Rate limits per minute
+// Extension users (identified by UUID in X-RetractCheck-Client): 50/min
+// Anonymous users: 10/min
+const EXTENSION_RATE_LIMITS: RateLimitConfig = {
   status: {
-    limit: 100,
-    windowSeconds: 86_400,
-    ipLimit: 200,
+    limit: 50,
+    windowSeconds: 60,
+    ipLimit: 100, // IP limit slightly higher to allow multiple clients behind NAT
   },
   override: {
-    limit: 10,
-    windowSeconds: 172_800,
-    ipLimit: 20,
+    limit: 5,
+    windowSeconds: 60,
+    ipLimit: 10,
   },
 };
+
+const ANONYMOUS_RATE_LIMITS: RateLimitConfig = {
+  status: {
+    limit: 10,
+    windowSeconds: 60,
+    ipLimit: 20,
+  },
+  override: {
+    limit: 2,
+    windowSeconds: 60,
+    ipLimit: 5,
+  },
+};
+
+// UUID v4 pattern to identify extension clients
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OVERRIDE_KEY_PREFIX = 'override:';
 const OVERRIDE_TTL_SECONDS = 60 * 60 * 24 * 90;
 
@@ -229,8 +248,8 @@ export default {
           });
         }
 
-        const rateConfig = getRateLimitConfig(env);
         const clientId = normalizeClientId(request.headers.get('X-RetractCheck-Client'));
+        const rateConfig = getRateLimitConfig(env, clientId);
         const ip = getRequestIp(request);
         const quota = await enforceQuota(env.RETRACTCHECK_CACHE, rateConfig.override, 'override', clientId, ip);
         if (!quota.ok) {
@@ -340,8 +359,8 @@ export default {
         return buildResponse({ doi: raw ?? '', meta: {}, records: [] });
       }
 
-      const rateConfig = getRateLimitConfig(env);
       const clientId = normalizeClientId(request.headers.get('X-RetractCheck-Client'));
+      const rateConfig = getRateLimitConfig(env, clientId);
       const ip = getRequestIp(request);
       const quota = await enforceQuota(env.RETRACTCHECK_CACHE, rateConfig.status, 'status', clientId, ip);
       if (!quota.ok) {
@@ -369,7 +388,8 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-function getRateLimitConfig(env: Env): RateLimitConfig {
+function getRateLimitConfig(env: Env, clientId: string): RateLimitConfig {
+  // Allow environment override for custom limits
   if (env.RATE_LIMIT_CONFIG) {
     try {
       const parsed = JSON.parse(env.RATE_LIMIT_CONFIG) as RateLimitConfig;
@@ -380,7 +400,14 @@ function getRateLimitConfig(env: Env): RateLimitConfig {
       // ignore malformed overrides
     }
   }
-  return DEFAULT_RATE_LIMITS;
+
+  // Extension users (identified by UUID) get higher limits
+  if (UUID_PATTERN.test(clientId)) {
+    return EXTENSION_RATE_LIMITS;
+  }
+
+  // Anonymous users get lower limits
+  return ANONYMOUS_RATE_LIMITS;
 }
 
 function normalizeClientId(value: string | null): string {
@@ -513,8 +540,8 @@ async function incrementCounter(
 }
 
 const RATE_LIMIT_RESPONSE_MESSAGES: Record<RateLimitType, string> = {
-  status: 'Daily lookup limit reached. Try again tomorrow.',
-  override: 'Override limit reached. Try again in two days.',
+  status: 'Rate limit reached. Please wait before trying again.',
+  override: 'Override rate limit reached. Please wait before trying again.',
 };
 
 function quotaExceededResponse(type: RateLimitType, result: Extract<QuotaResult, { ok: false }>): Response {
