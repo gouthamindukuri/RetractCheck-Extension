@@ -11,12 +11,6 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "retractcheck@addons.mozilla.org",
-      "strict_min_version": "109.0"
-    }
-  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

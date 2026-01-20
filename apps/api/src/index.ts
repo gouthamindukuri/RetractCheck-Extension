@@ -31,6 +31,22 @@ const METADATA_KEY = 'ingest:metadata';
 const QUOTA_PREFIX = 'quota';
 const RATE_LIMIT_ALLOW_HEADERS = 'Content-Type, X-RetractCheck-Client';
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS, POST',
+  'Access-Control-Allow-Headers': RATE_LIMIT_ALLOW_HEADERS,
+} as const;
+
+function jsonErrorResponse(message: string, status: number): Response {
+  return new Response(JSON.stringify({ ok: false, error: message }), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      ...CORS_HEADERS,
+    },
+  });
+}
+
 /**
  * Constant-time string comparison to prevent timing attacks.
  * Always compares all characters regardless of where a mismatch occurs.
@@ -169,17 +185,17 @@ export default {
 
     if (url.pathname === "/v1/ingest") {
       if (request.method !== "POST") {
-        return new Response("Method Not Allowed", { status: 405 });
+        return jsonErrorResponse("Method Not Allowed", 405);
       }
 
       if (!env.INGEST_TOKEN) {
-        return new Response("Ingest disabled", { status: 403 });
+        return jsonErrorResponse("Ingest disabled", 403);
       }
 
       const authHeader = request.headers.get("authorization") || "";
       const token = authHeader.replace(/^Bearer\s+/i, "");
       if (!token || !secureCompare(token, env.INGEST_TOKEN)) {
-        return new Response("Unauthorized", { status: 401 });
+        return jsonErrorResponse("Unauthorized", 401);
       }
 
       try {
@@ -201,7 +217,7 @@ export default {
     if (url.pathname === "/v1/override") {
       if (request.method === "OPTIONS") return handleOptions();
       if (request.method !== "POST") {
-        return new Response("Method Not Allowed", { status: 405 });
+        return jsonErrorResponse("Method Not Allowed", 405);
       }
 
       try {
@@ -259,8 +275,9 @@ export default {
     }
 
     if (request.method === "OPTIONS") return handleOptions();
-    if (request.method !== "GET")
-      return new Response("Method Not Allowed", { status: 405 });
+    if (request.method !== "GET") {
+      return jsonErrorResponse("Method Not Allowed", 405);
+    }
 
     if (url.pathname === "/v1/health") {
       const activeTable = await getActiveTableName(env.RETRACTCHECK_CACHE);
@@ -345,17 +362,11 @@ export default {
         return buildResponse(status);
       } catch (err) {
         console.error("status lookup failed", err);
-        return new Response("Internal Error", {
-          status: 500,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': RATE_LIMIT_ALLOW_HEADERS,
-          },
-        });
+        return jsonErrorResponse("Internal Error", 500);
       }
     }
 
-    return new Response("Not Found", { status: 404 });
+    return jsonErrorResponse("Not Found", 404);
   },
 
   async scheduled(

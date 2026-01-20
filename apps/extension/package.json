@@ -11,9 +11,9 @@
     "dev": "NODE_ENV=development bunx tsup --config tsup.config.ts --watch & shx cp -r public/* dist/",
     "test": "vitest run --config vitest.config.ts",
     "clean": "shx rm -rf dist",
-    "package:chrome": "bun run build && cd dist && ../../../node_modules/.bin/bestzip ../RetractCheck-chrome.zip . && cd -",
-    "package:firefox": "bun run build && shx cp public/manifest.firefox.json dist/manifest.json && cd dist && ../../../node_modules/.bin/bestzip ../RetractCheck-firefox.xpi . && cd - && shx cp public/manifest.json dist/manifest.json",
-    "package:edge": "bun run build && shx cp public/manifest.edge.json dist/manifest.json && cd dist && ../../../node_modules/.bin/bestzip ../RetractCheck-edge.zip . && cd - && shx cp public/manifest.json dist/manifest.json",
+    "package:chrome": "bun run build && shx rm -f dist/*.map dist/manifest.firefox.json dist/manifest.edge.json && cd dist && ../../../node_modules/.bin/bestzip ../RetractCheck-chrome.zip . && cd -",
+    "package:firefox": "bun run build && shx rm -f dist/*.map dist/manifest.edge.json && shx cp public/manifest.firefox.json dist/manifest.json && shx rm -f dist/manifest.firefox.json && cd dist && ../../../node_modules/.bin/bestzip ../RetractCheck-firefox.xpi . && cd -",
+    "package:edge": "bun run build && shx rm -f dist/*.map dist/manifest.firefox.json && shx cp public/manifest.edge.json dist/manifest.json && shx rm -f dist/manifest.edge.json && cd dist && ../../../node_modules/.bin/bestzip ../RetractCheck-edge.zip . && cd -",
     "package": "bun run package:chrome && bun run package:firefox && bun run package:edge"
   },
   "dependencies": {
