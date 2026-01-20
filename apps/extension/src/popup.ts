@@ -33,6 +33,8 @@ const messageEl = document.getElementById('message') as HTMLElement;
 const statusChipEl = document.getElementById('status-chip') as HTMLElement;
 const recordsEl = document.getElementById('records') as HTMLElement;
 const loadingEl = document.getElementById('loading') as HTMLElement;
+const footerEl = document.getElementById('footer') as HTMLElement;
+const footerTextEl = document.getElementById('footer-text') as HTMLElement;
 
 let state: PopupState = { doi: null, supported: true };
 
@@ -164,9 +166,23 @@ function renderRecords(response: RetractionStatusResponse): void {
   hideLoading();
   clearMessage();
 
-  const { records } = response;
+  const { records, meta } = response;
   updateStatusChip(records.length);
   recordsEl.innerHTML = '';
+
+  // Show last updated date in footer
+  if (meta?.updatedAt) {
+    const date = new Date(meta.updatedAt);
+    const formatted = date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    footerTextEl.textContent = `Data updated ${formatted}`;
+    footerEl.hidden = false;
+  } else {
+    footerEl.hidden = true;
+  }
 
   if (!records.length) return;
 
@@ -249,6 +265,7 @@ function renderError(message: string): void {
   statusChipEl.textContent = 'Error';
   statusChipEl.className = 'status-chip status-chip--error';
   recordsEl.innerHTML = '';
+  footerEl.hidden = true;
 }
 
 function renderDisabled(): void {
@@ -257,6 +274,7 @@ function renderDisabled(): void {
   statusChipEl.textContent = 'Paused';
   statusChipEl.className = 'status-chip status-chip--muted';
   recordsEl.innerHTML = '';
+  footerEl.hidden = true;
 }
 
 function renderNoDoi(): void {
@@ -265,6 +283,7 @@ function renderNoDoi(): void {
   statusChipEl.textContent = 'No DOI';
   statusChipEl.className = 'status-chip status-chip--muted';
   recordsEl.innerHTML = '';
+  footerEl.hidden = true;
 }
 
 function renderUnsupported(): void {
@@ -272,6 +291,7 @@ function renderUnsupported(): void {
   statusChipEl.textContent = 'Unsupported';
   statusChipEl.className = 'status-chip status-chip--muted';
   recordsEl.innerHTML = '';
+  footerEl.hidden = true;
   toggleEl.disabled = true;
   messageEl.hidden = false;
   messageEl.className = 'message message--muted';
@@ -310,12 +330,13 @@ function renderRateLimit(info: RateLimitInfo): void {
   const retryText = formatRetryTime(info.retryAt);
   const message =
     info.type === 'status'
-      ? `Daily lookup limit reached. Try again ${retryText}.`
+      ? `Rate limit reached. Try again ${retryText}.`
       : `Override limit reached. Try again ${retryText}.`;
   setMessage(message, 'muted');
   statusChipEl.textContent = info.type === 'status' ? 'Limited' : 'Override limited';
   statusChipEl.className = 'status-chip status-chip--muted';
   recordsEl.innerHTML = '';
+  footerEl.hidden = true;
 }
 
 function hideLoading(): void {
