@@ -6,6 +6,12 @@ RetractCheck is a browser extension that extracts the DOI from the page you are 
 - **Firefox** builds include a fallback background script until Manifest V3 service workers are fully enabled.
 - The supported-host allow list is forked from the [PubPeer browser extension](https://github.com/PubPeerFoundation/PubPeerBrowserExtensions/tree/master). Open an issue if we are missing a venue you rely on.
 
+## Requirements
+
+- [Bun](https://bun.sh/) 1.2.22+
+- macOS, Linux, or Windows 10+
+- A Cloudflare account to self-host the API (optional)
+
 ## Getting Started
 
 ```bash
@@ -13,41 +19,40 @@ git clone https://github.com/gouthamindukuri/RetractCheck-Extension.git
 cd RetractCheck-Extension
 bun install
 
-# provide your Worker endpoint (e.g. https://your-worker.workers.dev)
-export RETRACTCHECK_WORKER_URL="https://your-worker.workers.dev"
+# Set your Worker endpoint (required)
+cp .env.example .env
+# Edit .env with your worker URL
 
-# build once
+# Build
 bun run build
 
-# lint / test
+# Lint and test
 bun run lint
 bun run test
 
-# package for stores
-bun run package         # builds both bundles
-bun run package:chrome  # emits RetractCheck-chrome.zip
-bun run package:firefox # emits RetractCheck-firefox.xpi
+# Package for browser stores
+bun run package         # All browsers
+bun run package:firefox # Firefox only
+bun run package:edge    # Edge only
 ```
-
-The Firefox packaging task swaps in `public/manifest.firefox.json` before zipping and restores the Chrome manifest afterward.
 
 ## API (Cloudflare Worker)
 
-The extension talks to the Worker in `apps/api`. Copy the example configuration and add your own bindings:
+The extension talks to the Worker in `apps/api`:
 
 ```bash
 cp apps/api/wrangler.example.toml apps/api/wrangler.toml
-# edit the KV + D1 identifiers inside
+# Edit wrangler.toml with your KV and D1 bindings
 
 cd apps/api
-bunx wrangler secret put RETRACTCHECK_SOURCE_URL  # optional CSV override
+bunx wrangler secret put INGEST_TOKEN
 bunx wrangler deploy
 ```
 
-## Contributing & Support
+## Contributing
 
 - File bugs or host-coverage requests in the [issues section](https://github.com/gouthamindukuri/RetractCheck-Extension/issues).
-- Pull requests are welcome—please run `bun run lint` and `bun run test` before submitting.
+- Pull requests welcome. Run `bun run lint && bun run test` before submitting.
 
 ## License
 
