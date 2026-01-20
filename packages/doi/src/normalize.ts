@@ -22,7 +22,8 @@ export function cleanDoi(raw: unknown): string | null {
 
   let doi = hit[1].toLowerCase();
   const segs = doi.split('/');
-  if (segs.length >= 3 && VIEW_TOKENS.has(segs[segs.length - 1] as any)) {
+  const lastSeg = segs[segs.length - 1];
+  if (segs.length >= 3 && lastSeg && VIEW_TOKENS.has(lastSeg as typeof VIEW_TOKENS extends Set<infer T> ? T : never)) {
     segs.pop();
     doi = segs.join('/');
   }

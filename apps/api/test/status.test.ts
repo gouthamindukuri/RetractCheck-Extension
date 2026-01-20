@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import handler from '../src/index';
+import type { Env } from '../src/env';
 
-const mockRow = {
+type MockRow = { record_id: number; raw: string; updated_at: number };
+
+const mockRow: MockRow = {
   record_id: 1,
   raw: JSON.stringify({ Title: 'Sample Retraction' }),
   updated_at: 123,
 };
 
-function makeEnv(overrides: Partial<Record<string, any>> = {}) {
+type EnvOverrides = Partial<Env & { dbRows: MockRow[] }>;
+
+function makeEnv(overrides: EnvOverrides = {}): Env {
   const cacheStore = new Map<string, string>();
   const dbRows = overrides.dbRows ?? [mockRow];
 
@@ -40,7 +45,7 @@ function makeEnv(overrides: Partial<Record<string, any>> = {}) {
     },
     API_VERSION: 'v1',
     ...overrides,
-  } as any;
+  } as unknown as Env;
 }
 
 describe('status handler', () => {

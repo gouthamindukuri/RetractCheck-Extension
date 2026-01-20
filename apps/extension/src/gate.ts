@@ -32,9 +32,12 @@ export function looksArticleLike(doc: Document = document): boolean {
 
   try {
     for (const s of Array.from(doc.querySelectorAll('script[type="application/ld+json"]'))) {
-      const j = JSON.parse(s.textContent || 'null');
-      const items = Array.isArray(j) ? j : j?.['@graph'] || [j];
-      if (items.some((it: any) => /scholarlyarticle/i.test(it?.['@type'] || ''))) return true;
+      const j = JSON.parse(s.textContent || 'null') as Record<string, unknown> | unknown[] | null;
+      const items: unknown[] = Array.isArray(j) ? j : (j?.['@graph'] as unknown[]) || [j];
+      if (items.some((it) => {
+        const item = it as Record<string, unknown> | null;
+        return /scholarlyarticle/i.test(String(item?.['@type'] ?? ''));
+      })) return true;
     }
   } catch {}
   return false;

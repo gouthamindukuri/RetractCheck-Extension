@@ -29,7 +29,7 @@ export default [
       'no-console': 'off',
       'no-empty': ['warn', { allowEmptyCatch: true }],
       'import/order': ['warn', { 'newlines-between': 'always' }],
-      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
       // Disable base rule to avoid conflicts with @typescript-eslint/no-unused-vars
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }]
