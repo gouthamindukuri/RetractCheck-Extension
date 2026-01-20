@@ -100,9 +100,7 @@ function buildResponse(body: RetractionStatusResponse): Response {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': `public, max-age=${CACHE_TTL}`,
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': RATE_LIMIT_ALLOW_HEADERS,
+      ...CORS_HEADERS,
     },
   });
 }
@@ -171,11 +169,7 @@ async function fetchStatus(env: Env, doi: string): Promise<RetractionStatusRespo
 function handleOptions(): Response {
   return new Response(null, {
     status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS, POST",
-      "Access-Control-Allow-Headers": RATE_LIMIT_ALLOW_HEADERS,
-    },
+    headers: CORS_HEADERS,
   });
 }
 
@@ -230,8 +224,7 @@ export default {
             status: 400,
             headers: {
               'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Headers': RATE_LIMIT_ALLOW_HEADERS,
+              ...CORS_HEADERS,
             },
           });
         }
@@ -257,8 +250,7 @@ export default {
         return new Response(JSON.stringify({ ok: true }), {
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': RATE_LIMIT_ALLOW_HEADERS,
+            ...CORS_HEADERS,
           },
         });
       } catch (error) {
@@ -267,8 +259,7 @@ export default {
           status: 500,
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': RATE_LIMIT_ALLOW_HEADERS,
+            ...CORS_HEADERS,
           },
         });
       }
@@ -288,7 +279,7 @@ export default {
       }), {
         headers: {
           "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
+          ...CORS_HEADERS,
         },
       });
     }
@@ -335,7 +326,7 @@ export default {
         status: stale ? 503 : 200,
         headers: {
           "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
+          ...CORS_HEADERS,
           // Cache for 5 minutes to avoid hammering the endpoint
           "Cache-Control": "public, max-age=300",
         },
@@ -540,9 +531,7 @@ function quotaExceededResponse(type: RateLimitType, result: Extract<QuotaResult,
       status: 429,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': RATE_LIMIT_ALLOW_HEADERS,
-        'Access-Control-Allow-Methods': 'GET, OPTIONS, POST',
+        ...CORS_HEADERS,
         'Retry-After': String(retryAfter),
       },
     },
