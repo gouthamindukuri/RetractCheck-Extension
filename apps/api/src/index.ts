@@ -31,6 +31,13 @@ const METADATA_KEY = 'ingest:metadata';
 const QUOTA_PREFIX = 'quota';
 const RATE_LIMIT_ALLOW_HEADERS = 'Content-Type, X-RetractCheck-Client';
 
+// Input validation limits to prevent abuse and KV pollution
+const MAX_CLIENT_ID_LENGTH = 64;
+const MAX_DOI_LENGTH = 500;
+const MAX_HOST_LENGTH = 255;
+const MAX_URL_LENGTH = 2048;
+const MAX_OVERRIDE_BODY_SIZE = 10_000; // 10KB max for override requests
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, OPTIONS, POST',
@@ -233,11 +240,26 @@ export default {
         return jsonErrorResponse("Method Not Allowed", 405);
       }
 
+      // Check request body size before parsing
+      const contentLength = request.headers.get('Content-Length');
+      if (contentLength && parseInt(contentLength, 10) > MAX_OVERRIDE_BODY_SIZE) {
+        return jsonErrorResponse("Request body too large", 413);
+      }
+
       try {
         const body = (await request.json()) as Record<string, unknown>;
-        const host = typeof body.host === 'string' ? body.host.toLowerCase() : null;
-        const doi = typeof body.doi === 'string' ? body.doi.trim().toLowerCase() : undefined;
-        const targetUrl = typeof body.url === 'string' ? body.url : undefined;
+
+        // Validate and truncate fields to prevent abuse
+        const host = typeof body.host === 'string'
+          ? body.host.toLowerCase().slice(0, MAX_HOST_LENGTH)
+          : null;
+        const doi = typeof body.doi === 'string'
+          ? body.doi.trim().toLowerCase().slice(0, MAX_DOI_LENGTH)
+          : undefined;
+        const targetUrl = typeof body.url === 'string'
+          ? body.url.slice(0, MAX_URL_LENGTH)
+          : undefined;
+
         if (!host) {
           return new Response(JSON.stringify({ ok: false, error: 'Invalid host' }), {
             status: 400,
@@ -304,7 +326,6 @@ export default {
     }
 
     if (url.pathname === "/v1/info") {
-      const activeTable = await getActiveTableName(env.RETRACTCHECK_CACHE);
       const metadataRaw = await env.RETRACTCHECK_CACHE.get(METADATA_KEY);
       const metadata = metadataRaw ? (JSON.parse(metadataRaw) as IngestMetadata) : null;
 
@@ -318,26 +339,13 @@ export default {
         stale = dataAgeHours > STALENESS_THRESHOLD_HOURS;
       }
 
-      // List all versioned tables
-      let tables: string[] = [];
-      try {
-        const result = await env.RETRACTCHECK_DB.prepare(
-          `SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'entries%' ORDER BY name DESC`
-        ).all<{ name: string }>();
-        tables = result.results?.map(r => r.name) || [];
-      } catch {
-        // Ignore errors
-      }
-
+      // Public info response - excludes internal table names and architecture details
       const responseBody = {
         ok: !stale,
         stale,
         dataAgeHours,
-        stalenessThresholdHours: STALENESS_THRESHOLD_HOURS,
-        activeTable: activeTable || LEGACY_TABLE_NAME,
-        usingLegacy: !activeTable,
-        metadata,
-        tables,
+        rowCount: metadata?.rowCount ?? null,
+        updatedAt: metadata?.updatedAt ?? null,
       };
 
       // Return 503 if stale so external monitors can detect it
@@ -354,6 +362,12 @@ export default {
 
     if (url.pathname === "/v1/status") {
       const raw = url.searchParams.get("doi");
+
+      // Reject excessively long DOI values
+      if (raw && raw.length > MAX_DOI_LENGTH) {
+        return jsonErrorResponse("DOI too long", 400);
+      }
+
       const doi = normaliseDoi(raw);
       if (!raw || !doi) {
         return buildResponse({ doi: raw ?? '', meta: {}, records: [] });
@@ -413,7 +427,9 @@ function getRateLimitConfig(env: Env, clientId: string): RateLimitConfig {
 function normalizeClientId(value: string | null): string {
   if (!value) return 'anon';
   const trimmed = value.trim();
-  return trimmed || 'anon';
+  if (!trimmed) return 'anon';
+  // Truncate to prevent KV key pollution from malicious long values
+  return trimmed.slice(0, MAX_CLIENT_ID_LENGTH);
 }
 
 /**
@@ -517,6 +533,16 @@ async function enforceQuota(
   return { ok: true };
 }
 
+/**
+ * Increment a rate limit counter in KV storage.
+ *
+ * NOTE: This implementation has a race condition - concurrent requests may both
+ * pass the limit check before either writes. This is acceptable because:
+ * 1. Rate limits here are soft protection for public data, not security-critical
+ * 2. KV doesn't support atomic increment operations
+ * 3. The window is short (60s), so any overage is minimal and temporary
+ * 4. For strict rate limiting, use Cloudflare's built-in rate limiting product
+ */
 async function incrementCounter(
   cache: KVNamespace,
   key: string,
