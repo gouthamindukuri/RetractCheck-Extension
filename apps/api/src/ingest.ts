@@ -42,7 +42,10 @@ export async function pingHealthcheck(
 export const ACTIVE_TABLE_KEY = 'ingest:active_table';
 const SOURCE_URL_DEFAULT =
   'https://gitlab.com/crossref/retraction-watch-data/-/raw/main/retraction_watch.csv';
-const BATCH_SIZE = 250;
+// D1 has a limit of 100 bound parameters per query (SQLite limit)
+// Using db.batch() allows multiple statements per round trip
+// Each INSERT has 5 params, so we can batch many rows efficiently
+const BATCH_SIZE = 500;
 const TABLE_RETENTION_DAYS = 7;
 
 // Retry configuration
@@ -228,7 +231,8 @@ async function createTable(db: D1Database, tableName: string): Promise<void> {
     throw new Error(`Invalid table name format: ${tableName}`);
   }
 
-  await db.exec(`
+  // Use prepare().run() instead of exec() for consistent result handling
+  await db.prepare(`
     CREATE TABLE IF NOT EXISTS ${tableName} (
       record_id INTEGER PRIMARY KEY,
       doi_norm_original TEXT,
@@ -236,7 +240,7 @@ async function createTable(db: D1Database, tableName: string): Promise<void> {
       raw TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     )
-  `);
+  `).run();
 }
 
 /**
@@ -248,14 +252,15 @@ async function createIndexes(db: D1Database, tableName: string): Promise<boolean
   }
 
   try {
-    await db.exec(`
+    // Use prepare().run() instead of exec() for consistent result handling
+    await db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_${tableName.slice(8)}_doi_original
       ON ${tableName} (doi_norm_original)
-    `);
-    await db.exec(`
+    `).run();
+    await db.prepare(`
       CREATE INDEX IF NOT EXISTS idx_${tableName.slice(8)}_doi_retraction
       ON ${tableName} (doi_norm_retraction)
-    `);
+    `).run();
     return true;
   } catch (error) {
     console.error('[ingest] Failed to create indexes:', error);
@@ -270,7 +275,8 @@ async function dropTable(db: D1Database, tableName: string): Promise<void> {
   if (!/^entries_\d{14}$/.test(tableName)) {
     throw new Error(`Invalid table name format: ${tableName}`);
   }
-  await db.exec(`DROP TABLE IF EXISTS ${tableName}`);
+  // Use prepare().run() instead of exec() for consistent result handling
+  await db.prepare(`DROP TABLE IF EXISTS ${tableName}`).run();
 }
 
 /**
@@ -333,21 +339,18 @@ async function streamInsertData(
   const flushBatch = async () => {
     if (!batch.length) return;
 
-    const placeholders = batch.map(() => '(?, ?, ?, ?, ?)').join(', ');
-    const values = batch.flatMap(row => [
-      row.recordId,
-      row.doiOriginal,
-      row.doiRetraction,
-      row.raw,
-      row.updatedAt
-    ]);
+    // Use db.batch() with individual prepared statements
+    // This avoids the 100 bound parameter limit per query
+    // while still executing all inserts in a single round trip
+    const statements = batch.map(row =>
+      db.prepare(
+        `INSERT OR REPLACE INTO ${tableName}
+         (record_id, doi_norm_original, doi_norm_retraction, raw, updated_at)
+         VALUES (?, ?, ?, ?, ?)`
+      ).bind(row.recordId, row.doiOriginal, row.doiRetraction, row.raw, row.updatedAt)
+    );
 
-    await db.prepare(
-      `INSERT OR REPLACE INTO ${tableName}
-       (record_id, doi_norm_original, doi_norm_retraction, raw, updated_at)
-       VALUES ${placeholders}`
-    ).bind(...values).run();
-
+    await db.batch(statements);
     batch = [];
   };
 
