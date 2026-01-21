@@ -1,4 +1,4 @@
-import { normaliseDoi } from '@retractcheck/doi';
+import { normaliseDoi } from '@retractcheck/doi/normalize';
 import type { D1Database, KVNamespace, RequestInit } from '@cloudflare/workers-types';
 
 import type { Env } from './env';
@@ -53,6 +53,10 @@ const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
 const RETRY_BACKOFF_MULTIPLIER = 2;
 
+// Logging limits to avoid spam
+const LOG_WARNING_SAMPLE_LIMIT = 5;
+const LOG_SKIPPED_ROW_LIMIT = 10;
+
 export interface IngestStats {
   fetchedBytes: number;
   processedRows: number;
@@ -89,12 +93,12 @@ function parseTableTimestamp(tableName: string): Date | null {
   const match = tableName.match(/^entries_(\d{14})$/);
   if (!match) return null;
   const ts = match[1];
-  const year = parseInt(ts.slice(0, 4));
-  const month = parseInt(ts.slice(4, 6)) - 1;
-  const day = parseInt(ts.slice(6, 8));
-  const hour = parseInt(ts.slice(8, 10));
-  const min = parseInt(ts.slice(10, 12));
-  const sec = parseInt(ts.slice(12, 14));
+  const year = parseInt(ts.slice(0, 4), 10);
+  const month = parseInt(ts.slice(4, 6), 10) - 1;
+  const day = parseInt(ts.slice(6, 8), 10);
+  const hour = parseInt(ts.slice(8, 10), 10);
+  const min = parseInt(ts.slice(10, 12), 10);
+  const sec = parseInt(ts.slice(12, 14), 10);
   return new Date(year, month, day, hour, min, sec);
 }
 
@@ -128,8 +132,9 @@ async function fetchWithRetry(
       console.warn(`[ingest] Fetch attempt ${attempt}/${maxRetries} failed: ${lastError.message}`);
 
       if (attempt < maxRetries) {
-        console.log(`[ingest] Retrying in ${delay}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        // Add jitter (0.5x to 1.5x) to prevent thundering herd
+        const jitteredDelay = Math.floor(delay * (0.5 + Math.random() * 1.0));
+        await new Promise((resolve) => setTimeout(resolve, jitteredDelay));
         delay *= RETRY_BACKOFF_MULTIPLIER;
       }
     }
@@ -311,7 +316,7 @@ function validateRow(
   const hasRetractionDoi = record['RetractionDOI']?.trim();
   if (!hasOriginalDoi && !hasRetractionDoi) {
     // Log warning but still valid - some records may not have DOIs yet
-    if (rowNumber <= 5) { // Only log first few warnings to avoid spam
+    if (rowNumber <= LOG_WARNING_SAMPLE_LIMIT) {
       console.warn(`[ingest] Row ${rowNumber}: No DOI found (Record ID: ${record['Record ID']})`);
     }
   }
@@ -325,7 +330,8 @@ async function streamInsertData(
   body: ReadableStream<Uint8Array>
 ): Promise<{ processedRows: number; skippedRows: number; fetchedBytes: number }> {
   const reader = body.getReader();
-  const decoder = new TextDecoder('utf-8');
+  // Use fatal: true to throw on invalid UTF-8 instead of silently replacing with U+FFFD
+  const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false });
 
   let totalBytes = 0;
   let processedRows = 0;
@@ -373,7 +379,7 @@ async function streamInsertData(
     const validation = validateRow(record, rowNumber);
     if (!validation.valid) {
       skippedRows++;
-      if (skippedRows <= 10) { // Log first 10 skipped rows
+      if (skippedRows <= LOG_SKIPPED_ROW_LIMIT) {
         console.warn(`[ingest] Skipping row ${rowNumber}: ${validation.reason}`);
       }
       return;
@@ -447,8 +453,8 @@ async function streamInsertData(
 
   await flushBatch();
 
-  if (skippedRows > 10) {
-    console.warn(`[ingest] Total skipped rows: ${skippedRows} (only first 10 logged)`);
+  if (skippedRows > LOG_SKIPPED_ROW_LIMIT) {
+    console.warn(`[ingest] Total skipped rows: ${skippedRows} (only first ${LOG_SKIPPED_ROW_LIMIT} logged)`);
   }
 
   return { processedRows, skippedRows, fetchedBytes: totalBytes };

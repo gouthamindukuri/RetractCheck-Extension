@@ -1,4 +1,4 @@
-import type { RetractionStatusResponse } from '@retractcheck/types';
+import type { RetractionStatusResponse, ExtensionSettings } from '@retractcheck/types';
 
 import { OVERRIDES_KEY } from './constants';
 
@@ -43,15 +43,13 @@ class RateLimitError extends Error {
   }
 }
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+const RATE_LIMIT_FALLBACK_STATUS = 86400; // 1 day in seconds
+const RATE_LIMIT_FALLBACK_OVERRIDE = 172800; // 2 days in seconds
 const BADGE_COLOR = '#DC2626';
 const BADGE_MAX_COUNT = 99;
 const BADGE_DISABLED_TITLE = 'RetractCheck (checks disabled)';
 const DEFAULT_TITLE = 'RetractCheck';
 const INTERNAL_STATE_KEY = 'retractcheck:internal';
-
-type Settings = {
-  remoteEnabled: boolean;
-};
 
 type CacheEntry = {
   doi: string;
@@ -278,13 +276,13 @@ function isExpired(entry: CacheEntry): boolean {
   return Date.now() > entry.expiresAt;
 }
 
-async function getSettings(): Promise<Settings> {
+async function getSettings(): Promise<ExtensionSettings> {
   const stored = await chrome.storage.sync.get(STORAGE_KEY);
-  const settings = stored[STORAGE_KEY] as Settings | undefined;
+  const settings = stored[STORAGE_KEY] as ExtensionSettings | undefined;
   return settings ?? { remoteEnabled: true };
 }
 
-function saveSettings(settings: Settings): Promise<void> {
+function saveSettings(settings: ExtensionSettings): Promise<void> {
   return chrome.storage.sync.set({ [STORAGE_KEY]: settings });
 }
 
@@ -416,7 +414,7 @@ async function handleRateLimitResponse(type: RateLimitType, res: Response): Prom
     }
   }
 
-  const fallbackSeconds = type === 'override' ? 172800 : 86400;
+  const fallbackSeconds = type === 'override' ? RATE_LIMIT_FALLBACK_OVERRIDE : RATE_LIMIT_FALLBACK_STATUS;
   const retryAt = Date.now() + (retryAfterSeconds ?? fallbackSeconds) * 1000;
   throw new RateLimitError(type, retryAt, message);
 }

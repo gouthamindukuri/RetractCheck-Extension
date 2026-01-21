@@ -108,7 +108,7 @@ describe('rate limits', () => {
       });
 
     const ok = await handler.fetch(buildRequest('client-a'), env);
-    expect(ok.status).toBe(200);
+    expect(ok.status).toBe(201); // POST creates resource, returns 201
     const limitedClient = await handler.fetch(buildRequest('client-a'), env);
     expect(limitedClient.status).toBe(429);
     const bodyClient = await limitedClient.json();
@@ -135,9 +135,9 @@ describe('rate limits', () => {
       });
 
     const first = await handler.fetch(buildRequest('client-a'), env);
-    expect(first.status).toBe(200);
+    expect(first.status).toBe(201); // POST creates resource, returns 201
     const second = await handler.fetch(buildRequest('client-b'), env);
-    expect(second.status).toBe(200);
+    expect(second.status).toBe(201); // POST creates resource, returns 201
     const limited = await handler.fetch(buildRequest('client-c'), env);
     expect(limited.status).toBe(429);
     const body = await limited.json();

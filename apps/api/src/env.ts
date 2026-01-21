@@ -9,4 +9,8 @@ export interface Env {
   RATE_LIMIT_CONFIG?: string;
   /** Healthchecks.io ping URL for ingest monitoring (e.g., https://hc-ping.com/your-uuid) */
   HEALTHCHECK_PING_URL?: string;
+  /** Telegram bot token for override notifications */
+  TELEGRAM_BOT_TOKEN?: string;
+  /** Telegram chat ID to send notifications to */
+  TELEGRAM_CHAT_ID?: string;
 }

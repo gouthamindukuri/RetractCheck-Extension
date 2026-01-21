@@ -4,10 +4,6 @@ const DOMAIN_SET = new Set(Domains.getDomainList().map((d) => d.toLowerCase()));
 
 const PATH_HINTS = [/\/doi\//i, /\/article\//i, /\/journals?\//i, /\/content\//i];
 
-export function inHostAllowList(u: Location = location): boolean {
-  return isSupportedLocation(u);
-}
-
 export function isSupportedLocation(u: Location = location): boolean {
   const href = u.href || `${u.protocol}//${u.host}${u.pathname}${u.search || ''}`;
   if (href && Domains.validate(href)) return true;

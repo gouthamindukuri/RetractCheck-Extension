@@ -6,34 +6,53 @@
     <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
-    <header class="top-bar">
-      <h1>RetractCheck</h1>
-      <label class="toggle">
+    <header class="header">
+      <div class="header-brand">
+        <img src="./icons/logo.svg" alt="" class="header-logo" />
+        <h1 class="header-title">RetractCheck</h1>
+      </div>
+      <label class="toggle-switch">
         <input type="checkbox" id="toggle" checked />
-        <span>Enable</span>
+        <span class="toggle-slider"></span>
       </label>
     </header>
 
-    <section class="doi-row">
-      <span class="doi-label">DOI</span>
-      <span class="doi-value" id="doi-text">—</span>
-    </section>
-
-    <div class="message" id="message" hidden></div>
-
-    <section class="results-section">
-      <div class="results-header">
-        <h2>Results</h2>
-        <span class="status-chip status-chip--muted" id="status-chip">—</span>
+    <main class="content">
+      <div class="doi-bar">
+        <span class="doi-label">DOI</span>
+        <span class="doi-value" id="doi-value">
+          <span class="doi-text doi-text--muted" id="doi-text">Not detected</span>
+        </span>
       </div>
 
-      <div class="loading" id="loading" hidden>Loading…</div>
-      <div class="records" id="records"></div>
-    </section>
+      <!-- Status hero (shown for clear/muted states) -->
+      <section class="status-hero status-hero--muted" id="status-hero">
+        <div class="status-icon" id="status-icon"></div>
+        <span class="status-label" id="status-label">Checking...</span>
+        <span class="status-meta" id="status-meta"></span>
+      </section>
 
-    <footer class="footer" id="footer" hidden>
-      <span class="footer-text" id="footer-text"></span>
-    </footer>
+      <!-- Alert banner (shown when notices exist) -->
+      <div class="alert-banner" id="alert-banner" hidden>
+        <div class="alert-banner-main">
+          <div class="alert-banner-icon" id="alert-icon"></div>
+          <span class="alert-banner-text" id="alert-text">Notices Found</span>
+        </div>
+        <span class="alert-banner-meta" id="alert-meta"></span>
+      </div>
+
+      <!-- Notice cards -->
+      <section class="notices" id="notices" hidden></section>
+
+      <!-- Message box -->
+      <div class="message" id="message" hidden></div>
+
+      <!-- Loading -->
+      <div class="loading" id="loading" hidden>
+        <div class="loading-spinner"></div>
+        <span>Checking status...</span>
+      </div>
+    </main>
 
     <script src="./popup.js"></script>
   </body>

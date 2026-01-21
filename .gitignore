@@ -38,3 +38,12 @@ apps/api/fixtures/
 # Temp files
 tmp/
 *.tmp
+
+# Claude Code
+CLAUDE.md
+.claude/
+.playwright-mcp/
+
+# Screenshots / images
+*.png
+!apps/extension/public/icons/*.png

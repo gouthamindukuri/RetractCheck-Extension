@@ -1,16 +1,7 @@
 import './popup.css';
-import type { RetractionStatusResponse } from '@retractcheck/types';
+import type { RetractionStatusResponse, RetractionRecord, ExtensionSettings, RateLimitInfo } from '@retractcheck/types';
 
 import { SITE_REQUEST_URL } from './constants';
-
-type Settings = {
-  remoteEnabled: boolean;
-};
-
-type RateLimitInfo = {
-  type: 'status' | 'override';
-  retryAt: number;
-};
 
 type MessageResponse = {
   ok: boolean;
@@ -27,14 +18,59 @@ type PopupState = {
   url?: string;
 };
 
+// SVG Icons
+const ICONS = {
+  copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+  </svg>`,
+  check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>`,
+  alertTriangle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/>
+    <line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>`,
+  shieldCheck: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    <path d="M9 12l2 2 4-4"/>
+  </svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="16" x2="12" y2="12"/>
+    <line x1="12" y1="8" x2="12.01" y2="8"/>
+  </svg>`,
+  pause: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="6" y="4" width="4" height="16"/>
+    <rect x="14" y="4" width="4" height="16"/>
+  </svg>`,
+  clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>`,
+  externalLink: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+    <polyline points="15 3 21 3 21 9"/>
+    <line x1="10" y1="14" x2="21" y2="3"/>
+  </svg>`,
+};
+
+// DOM Elements
 const toggleEl = document.getElementById('toggle') as HTMLInputElement;
+const doiValueEl = document.getElementById('doi-value') as HTMLElement;
 const doiTextEl = document.getElementById('doi-text') as HTMLElement;
+const statusHeroEl = document.getElementById('status-hero') as HTMLElement;
+const statusIconEl = document.getElementById('status-icon') as HTMLElement;
+const statusLabelEl = document.getElementById('status-label') as HTMLElement;
+const statusMetaEl = document.getElementById('status-meta') as HTMLElement;
+const alertBannerEl = document.getElementById('alert-banner') as HTMLElement;
+const alertIconEl = document.getElementById('alert-icon') as HTMLElement;
+const alertTextEl = document.getElementById('alert-text') as HTMLElement;
+const alertMetaEl = document.getElementById('alert-meta') as HTMLElement;
+const noticesEl = document.getElementById('notices') as HTMLElement;
 const messageEl = document.getElementById('message') as HTMLElement;
-const statusChipEl = document.getElementById('status-chip') as HTMLElement;
-const recordsEl = document.getElementById('records') as HTMLElement;
 const loadingEl = document.getElementById('loading') as HTMLElement;
-const footerEl = document.getElementById('footer') as HTMLElement;
-const footerTextEl = document.getElementById('footer-text') as HTMLElement;
 
 let state: PopupState = { doi: null, supported: true };
 
@@ -50,7 +86,7 @@ async function initialise(): Promise<void> {
   const { doi, supported } = context;
 
   const settingsResponse = (await chrome.runtime.sendMessage({ type: 'retractcheck:get-settings' })) as {
-    settings: Settings;
+    settings: ExtensionSettings;
   };
   toggleEl.checked = settingsResponse.settings.remoteEnabled;
 
@@ -119,47 +155,77 @@ async function queryAndRender(): Promise<void> {
 }
 
 function renderDoi(doi: string | null): void {
-  doiTextEl.className = 'doi-value';
+  doiTextEl.className = 'doi-text';
 
   if (!doi) {
     doiTextEl.textContent = 'Not detected';
-    doiTextEl.classList.add('doi-value--muted');
+    doiTextEl.classList.add('doi-text--muted');
+    doiTextEl.removeAttribute('title');
+    const existingBtn = doiValueEl.querySelector('.doi-copy-btn');
+    if (existingBtn) existingBtn.remove();
     return;
   }
 
-  const wrapper = document.createElement('span');
-  wrapper.className = 'doi-value';
+  // Truncate long DOIs
+  const truncated = doi.length > 30 ? doi.slice(0, 30) + '...' : doi;
+  doiTextEl.textContent = truncated;
+  if (doi.length > 30) {
+    doiTextEl.title = doi;
+  }
 
-  const value = document.createElement('span');
-  value.className = 'doi-value-text';
-  value.textContent = doi;
+  // Create copy button
+  let copyButton = doiValueEl.querySelector('.doi-copy-btn') as HTMLButtonElement | null;
+  if (!copyButton) {
+    copyButton = document.createElement('button');
+    copyButton.type = 'button';
+    copyButton.className = 'doi-copy-btn';
+    copyButton.setAttribute('aria-label', 'Copy DOI');
+    copyButton.innerHTML = ICONS.copy;
+    doiValueEl.appendChild(copyButton);
 
-  const copyButton = document.createElement('button');
-  copyButton.type = 'button';
-  copyButton.className = 'doi-copy';
-  copyButton.setAttribute('aria-label', 'Copy DOI');
-  copyButton.textContent = 'Copy';
+    copyButton.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(doi);
+        copyButton!.innerHTML = ICONS.check;
+        copyButton!.classList.add('doi-copy-btn--success');
+        setTimeout(() => {
+          copyButton!.innerHTML = ICONS.copy;
+          copyButton!.classList.remove('doi-copy-btn--success');
+        }, 1500);
+      } catch (error) {
+        console.warn('[RetractCheck] copy failed', error);
+      }
+    });
+  }
+}
 
-  copyButton.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(doi);
-      copyButton.textContent = 'Copied!';
-      setTimeout(() => {
-        copyButton.textContent = 'Copy';
-      }, 1500);
-    } catch (error) {
-      console.warn('[RetractCheck] copy failed', error);
-      copyButton.textContent = 'Press ⌘/Ctrl+C';
-      setTimeout(() => {
-        copyButton.textContent = 'Copy';
-      }, 2000);
-    }
+function showStatusHero(variant: 'clear' | 'muted' | 'warning', icon: string, label: string, meta?: string): void {
+  statusHeroEl.className = `status-hero status-hero--${variant}`;
+  statusIconEl.innerHTML = icon;
+  statusLabelEl.textContent = label;
+  statusMetaEl.textContent = meta || '';
+  statusHeroEl.hidden = false;
+  alertBannerEl.hidden = true;
+  noticesEl.hidden = true;
+}
+
+function showAlertBanner(count: number, meta?: string): void {
+  alertIconEl.innerHTML = ICONS.alertTriangle;
+  alertTextEl.textContent = count === 1 ? '1 Notice Found' : `${count} Notices Found`;
+  alertMetaEl.textContent = meta ? `As of ${meta}` : '';
+  alertBannerEl.hidden = false;
+  statusHeroEl.hidden = true;
+}
+
+function formatDataFreshness(updatedAt?: string): string {
+  if (!updatedAt) return '';
+  const date = new Date(updatedAt);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
   });
-
-  wrapper.append(value, copyButton);
-
-  doiTextEl.innerHTML = '';
-  doiTextEl.appendChild(wrapper);
 }
 
 function renderRecords(response: RetractionStatusResponse): void {
@@ -167,79 +233,184 @@ function renderRecords(response: RetractionStatusResponse): void {
   clearMessage();
 
   const { records, meta } = response;
-  updateStatusChip(records.length);
-  recordsEl.innerHTML = '';
+  const freshness = formatDataFreshness(meta?.updatedAt);
 
-  // Show last updated date in footer
-  if (meta?.updatedAt) {
-    const date = new Date(meta.updatedAt);
-    const formatted = date.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-    footerTextEl.textContent = `Data updated ${formatted}`;
-    footerEl.hidden = false;
-  } else {
-    footerEl.hidden = true;
+  noticesEl.innerHTML = '';
+
+  if (records.length === 0) {
+    showStatusHero('clear', ICONS.shieldCheck, 'No Notices Found', freshness ? `Data as of ${freshness}` : '');
+    noticesEl.hidden = true;
+    return;
   }
 
-  if (!records.length) return;
+  // Show alert banner for notices
+  showAlertBanner(records.length, freshness);
 
+  // Render notice cards
+  noticesEl.hidden = false;
   for (const record of records) {
-    const card = document.createElement('div');
-    card.className = 'record-card';
-
-    const dl = document.createElement('dl');
-    appendField(dl, 'Title', record.raw.Title);
-    appendField(dl, 'Article Type', record.raw.ArticleType);
-    appendField(dl, 'Retraction Nature', record.raw.RetractionNature);
-    appendField(dl, 'Reason(s)', record.raw.Reason);
-    appendField(dl, 'Retraction Date', record.raw.RetractionDate);
-    appendField(dl, 'Retraction DOI', hyperlink(record.raw.RetractionDOI, 'https://doi.org/'));
-    appendField(dl, 'Retraction PubMed ID', hyperlink(record.raw.RetractionPubMedID, 'https://pubmed.ncbi.nlm.nih.gov/'));
-    appendField(dl, 'Original DOI', hyperlink(record.raw.OriginalPaperDOI, 'https://doi.org/'));
-    appendField(dl, 'Original PubMed ID', hyperlink(record.raw.OriginalPaperPubMedID, 'https://pubmed.ncbi.nlm.nih.gov/'));
-    appendField(dl, 'Notes', record.raw.Notes);
-
-    card.appendChild(dl);
-    recordsEl.appendChild(card);
+    noticesEl.appendChild(createNoticeCard(record));
   }
 }
 
-function appendField(dl: HTMLDListElement, label: string, value?: string | HTMLElement | null): void {
-  if (!value) return;
+function createNoticeCard(record: RetractionRecord): HTMLElement {
+  const card = document.createElement('div');
+  card.className = 'notice-card';
 
-  const dt = document.createElement('dt');
-  dt.textContent = label;
-
-  const dd = document.createElement('dd');
-  if (value instanceof HTMLElement) {
-    dd.appendChild(value);
+  // Determine type based on RetractionNature
+  const nature = (record.raw.RetractionNature || '').toLowerCase();
+  if (nature.includes('retraction')) {
+    card.classList.add('notice-card--retraction');
+  } else if (nature.includes('correction')) {
+    card.classList.add('notice-card--correction');
+  } else if (nature.includes('concern') || nature.includes('expression')) {
+    card.classList.add('notice-card--concern');
   } else {
-    dd.textContent = value;
+    card.classList.add('notice-card--retraction');
   }
 
-  dl.append(dt, dd);
+  // Header with type and reason
+  const header = document.createElement('div');
+  header.className = 'notice-card-header';
+
+  const typeEl = document.createElement('div');
+  typeEl.className = 'notice-card-type';
+  typeEl.textContent = record.raw.RetractionNature || 'Notice';
+
+  const reasonEl = document.createElement('div');
+  reasonEl.className = 'notice-card-reason';
+  reasonEl.textContent = record.raw.Reason || 'No reason provided';
+
+  header.appendChild(typeEl);
+  header.appendChild(reasonEl);
+  card.appendChild(header);
+
+  // Body with details
+  const body = document.createElement('div');
+  body.className = 'notice-card-body';
+
+  addField(body, 'Title', record.raw.Title);
+  addField(body, 'Article Type', record.raw.ArticleType);
+  addField(body, 'Date', record.raw.RetractionDate);
+  if (record.raw.Notes) {
+    addField(body, 'Notes', record.raw.Notes);
+  }
+
+  card.appendChild(body);
+
+  // Links section - two rows
+  const links = document.createElement('div');
+  links.className = 'notice-card-links';
+
+  // Row 1: Retraction links
+  const retractionLink = createLinkElement(record.raw.RetractionDOI, 'https://doi.org/', 'Retraction');
+  const retractionPubmedLink = createLinkElement(record.raw.RetractionPubMedID, 'https://pubmed.ncbi.nlm.nih.gov/', 'Retraction PubMed');
+
+  if (retractionLink || retractionPubmedLink) {
+    const row1 = document.createElement('div');
+    row1.className = 'notice-card-link-row';
+    if (retractionLink) row1.appendChild(retractionLink);
+    if (retractionPubmedLink) row1.appendChild(retractionPubmedLink);
+    links.appendChild(row1);
+  }
+
+  // Row 2: Original paper links
+  const originalLink = createLinkElement(record.raw.OriginalPaperDOI, 'https://doi.org/', 'Original');
+  const originalPubmedLink = createLinkElement(record.raw.OriginalPaperPubMedID, 'https://pubmed.ncbi.nlm.nih.gov/', 'Original PubMed');
+
+  if (originalLink || originalPubmedLink) {
+    const row2 = document.createElement('div');
+    row2.className = 'notice-card-link-row';
+    if (originalLink) row2.appendChild(originalLink);
+    if (originalPubmedLink) row2.appendChild(originalPubmedLink);
+    links.appendChild(row2);
+  }
+
+  if (links.children.length > 0) {
+    card.appendChild(links);
+  }
+
+  return card;
 }
 
-function hyperlink(value?: string, prefix = ''): HTMLElement | null {
+function addField(container: HTMLElement, label: string, value?: string): void {
+  if (!value || value.trim() === '') return;
+
+  const field = document.createElement('div');
+  field.className = 'notice-field';
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'notice-field-label';
+  labelEl.textContent = label;
+
+  const valueEl = document.createElement('div');
+  valueEl.className = 'notice-field-value';
+
+  // Linkify URLs in text
+  const linkedContent = linkifyText(value);
+  valueEl.appendChild(linkedContent);
+
+  field.appendChild(labelEl);
+  field.appendChild(valueEl);
+  container.appendChild(field);
+}
+
+function linkifyText(text: string): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  // Match URLs (http, https)
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/gi;
+
+  let lastIndex = 0;
+  let match;
+
+  while ((match = urlRegex.exec(text)) !== null) {
+    // Add text before the URL
+    if (match.index > lastIndex) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+    }
+
+    // Validate and add the URL as a link
+    const urlStr = match[1];
+    try {
+      const url = new URL(urlStr);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        const link = document.createElement('a');
+        link.href = url.href;
+        link.target = '_blank';
+        link.rel = 'noreferrer noopener';
+        link.textContent = urlStr;
+        fragment.appendChild(link);
+      } else {
+        fragment.appendChild(document.createTextNode(urlStr));
+      }
+    } catch {
+      fragment.appendChild(document.createTextNode(urlStr));
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
+
+  return fragment;
+}
+
+function createLinkElement(value?: string, prefix = '', text = 'View'): HTMLElement | null {
   if (!value || value.trim() === '' || /unavailable/i.test(value)) return null;
 
   const rawUrl = prefix ? `${prefix}${value.trim()}` : value.trim();
 
-  // Validate URL has safe protocol (defense in depth)
   let url: URL;
   try {
     url = new URL(rawUrl);
   } catch {
-    // Invalid URL - don't create a link
     return null;
   }
 
-  // Only allow http and https protocols
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    console.warn('[RetractCheck] Blocked unsafe URL protocol:', url.protocol);
     return null;
   }
 
@@ -247,52 +418,42 @@ function hyperlink(value?: string, prefix = ''): HTMLElement | null {
   a.href = url.href;
   a.target = '_blank';
   a.rel = 'noreferrer noopener';
-  a.textContent = value;
+  a.className = 'notice-link';
+  a.innerHTML = `${text} ${ICONS.externalLink}`;
   return a;
 }
 
 function showLoading(): void {
   loadingEl.hidden = false;
   clearMessage();
-  statusChipEl.textContent = 'Checking…';
-  statusChipEl.className = 'status-chip status-chip--muted';
-  recordsEl.innerHTML = '';
+  showStatusHero('muted', ICONS.info, 'Checking...', '');
+  noticesEl.innerHTML = '';
+  noticesEl.hidden = true;
 }
 
 function renderError(message: string): void {
   hideLoading();
   setMessage(message, 'error');
-  statusChipEl.textContent = 'Error';
-  statusChipEl.className = 'status-chip status-chip--error';
-  recordsEl.innerHTML = '';
-  footerEl.hidden = true;
+  showStatusHero('warning', ICONS.alertTriangle, 'Error', '');
 }
 
 function renderDisabled(): void {
   hideLoading();
-  setMessage('RetractCheck is paused. Toggle it back on to resume checks.', 'muted');
-  statusChipEl.textContent = 'Paused';
-  statusChipEl.className = 'status-chip status-chip--muted';
-  recordsEl.innerHTML = '';
-  footerEl.hidden = true;
+  clearMessage();
+  showStatusHero('muted', ICONS.pause, 'Paused', 'Toggle on to resume checks');
 }
 
 function renderNoDoi(): void {
   hideLoading();
-  setMessage('No DOI detected on this page.', 'muted');
-  statusChipEl.textContent = 'No DOI';
-  statusChipEl.className = 'status-chip status-chip--muted';
-  recordsEl.innerHTML = '';
-  footerEl.hidden = true;
+  clearMessage();
+  showStatusHero('muted', ICONS.info, 'No DOI Detected', 'Navigate to an article page');
 }
 
 function renderUnsupported(): void {
   hideLoading();
-  statusChipEl.textContent = 'Unsupported';
-  statusChipEl.className = 'status-chip status-chip--muted';
-  recordsEl.innerHTML = '';
-  footerEl.hidden = true;
   toggleEl.disabled = true;
+  showStatusHero('muted', ICONS.info, 'Unsupported Website', '');
+
   messageEl.hidden = false;
   messageEl.className = 'message message--muted';
   messageEl.textContent = '';
@@ -302,13 +463,6 @@ function renderUnsupported(): void {
 
   const actions = document.createElement('div');
   actions.className = 'unsupported-actions';
-
-  const requestLink = document.createElement('a');
-  requestLink.href = SITE_REQUEST_URL;
-  requestLink.target = '_blank';
-  requestLink.rel = 'noreferrer';
-  requestLink.textContent = 'Open a support request';
-  requestLink.className = 'link';
 
   const overrideButton = document.createElement('button');
   overrideButton.type = 'button';
@@ -320,6 +474,13 @@ function renderUnsupported(): void {
   overrideButton.addEventListener('click', () => {
     void handleOverride(overrideButton);
   });
+
+  const requestLink = document.createElement('a');
+  requestLink.href = SITE_REQUEST_URL;
+  requestLink.target = '_blank';
+  requestLink.rel = 'noreferrer';
+  requestLink.textContent = 'Request site support';
+  requestLink.className = 'link';
 
   actions.append(overrideButton, requestLink);
   messageEl.append(note, actions);
@@ -333,10 +494,7 @@ function renderRateLimit(info: RateLimitInfo): void {
       ? `Rate limit reached. Try again ${retryText}.`
       : `Override limit reached. Try again ${retryText}.`;
   setMessage(message, 'muted');
-  statusChipEl.textContent = info.type === 'status' ? 'Limited' : 'Override limited';
-  statusChipEl.className = 'status-chip status-chip--muted';
-  recordsEl.innerHTML = '';
-  footerEl.hidden = true;
+  showStatusHero('warning', ICONS.clock, 'Rate Limited', `Retry ${retryText}`);
 }
 
 function hideLoading(): void {
@@ -352,16 +510,6 @@ function setMessage(text: string, tone: 'muted' | 'error'): void {
 function clearMessage(): void {
   messageEl.hidden = true;
   messageEl.textContent = '';
-}
-
-function updateStatusChip(count: number): void {
-  if (count > 0) {
-    statusChipEl.textContent = `${count} notice${count > 1 ? 's' : ''}`;
-    statusChipEl.className = 'status-chip status-chip--accent';
-  } else {
-    statusChipEl.textContent = 'No notices';
-    statusChipEl.className = 'status-chip status-chip--muted';
-  }
 }
 
 function formatRetryTime(timestamp: number): string {
@@ -431,8 +579,6 @@ async function getActiveTabContext(
   }
 
   try {
-    // Execute in MAIN world to access content script's window properties
-    // Type assertion needed since these globals are set by content.ts
     type RetractCheckWindow = Window & {
       __RETRACTCHECK_DOI?: string | null;
       __RETRACTCHECK_SUPPORTED?: boolean;
@@ -467,7 +613,7 @@ async function handleOverride(button: HTMLButtonElement): Promise<void> {
   if (!state.tabId || !state.host) return;
   button.disabled = true;
   const previousLabel = button.textContent;
-  button.textContent = 'Enabling…';
+  button.textContent = 'Enabling...';
   try {
     const response = (await chrome.runtime.sendMessage({
       type: 'retractcheck:add-override',

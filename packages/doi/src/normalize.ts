@@ -7,7 +7,8 @@ import {
   VIEW_TOKENS
 } from './constants';
 
-export function cleanDoi(raw: unknown): string | null {
+/** Normalize a DOI: strips URL prefixes, labels, and view tokens; lowercases */
+export function normaliseDoi(raw: unknown): string | null {
   if (!raw) return null;
 
   const str = String(raw)
@@ -30,7 +31,6 @@ export function cleanDoi(raw: unknown): string | null {
   return doi;
 }
 
-export function normaliseDoi(raw: unknown): string | null {
-  return cleanDoi(raw);
-}
+/** Alias for normaliseDoi */
+export const cleanDoi = normaliseDoi;
 

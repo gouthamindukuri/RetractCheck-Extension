@@ -4,7 +4,7 @@ import type {
   KVNamespace,
   ScheduledController,
 } from '@cloudflare/workers-types';
-import { normaliseDoi } from '@retractcheck/doi';
+import { normaliseDoi } from '@retractcheck/doi/normalize';
 import type { RetractionStatusResponse } from '@retractcheck/types';
 
 import type { Env } from './env';
@@ -25,7 +25,7 @@ type IngestMetadata = {
 // Legacy table name for backward compatibility during migration
 const LEGACY_TABLE_NAME = 'entries';
 
-const CACHE_TTL = 12 * 60 * 60; // 12h seconds
+const CACHE_TTL = 12 * 60 * 60; // 12 hours
 const STALENESS_THRESHOLD_HOURS = 26; // Data older than this is considered stale (24h cron + 2h grace)
 const METADATA_KEY = 'ingest:metadata';
 const QUOTA_PREFIX = 'quota';
@@ -40,8 +40,19 @@ const MAX_OVERRIDE_BODY_SIZE = 10_000; // 10KB max for override requests
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS, POST',
+  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS, POST',
   'Access-Control-Allow-Headers': RATE_LIMIT_ALLOW_HEADERS,
+} as const;
+
+// Security headers
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+} as const;
+
+// Combined standard headers for all responses
+const STANDARD_HEADERS = {
+  ...CORS_HEADERS,
+  ...SECURITY_HEADERS,
 } as const;
 
 function jsonErrorResponse(message: string, status: number): Response {
@@ -49,7 +60,21 @@ function jsonErrorResponse(message: string, status: number): Response {
     status,
     headers: {
       'Content-Type': 'application/json',
-      ...CORS_HEADERS,
+      ...STANDARD_HEADERS,
+    },
+  });
+}
+
+/**
+ * 405 Method Not Allowed response with required Allow header per RFC 7231 §6.5.5
+ */
+function methodNotAllowedResponse(allowedMethods: string[]): Response {
+  return new Response(JSON.stringify({ ok: false, error: 'Method Not Allowed' }), {
+    status: 405,
+    headers: {
+      'Content-Type': 'application/json',
+      'Allow': allowedMethods.join(', '),
+      ...STANDARD_HEADERS,
     },
   });
 }
@@ -121,12 +146,23 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0
 const OVERRIDE_KEY_PREFIX = 'override:';
 const OVERRIDE_TTL_SECONDS = 60 * 60 * 24 * 90;
 
-function buildResponse(body: RetractionStatusResponse): Response {
-  return new Response(JSON.stringify(body), {
+/**
+ * Build a JSON response, supporting both GET and HEAD methods.
+ * HEAD returns same headers but empty body per HTTP spec.
+ */
+function buildResponse(
+  body: RetractionStatusResponse,
+  isHead = false,
+  extraHeaders: Record<string, string> = {}
+): Response {
+  const jsonBody = JSON.stringify(body);
+  return new Response(isHead ? null : jsonBody, {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
+      'Content-Length': String(new TextEncoder().encode(jsonBody).length),
       'Cache-Control': `public, max-age=${CACHE_TTL}`,
-      ...CORS_HEADERS,
+      ...STANDARD_HEADERS,
+      ...extraHeaders,
     },
   });
 }
@@ -173,7 +209,14 @@ async function fetchStatus(env: Env, doi: string): Promise<RetractionStatusRespo
   const rows = await stmt.bind(doi, doi).all<RetractionRow>();
 
   const metadataRaw = await env.RETRACTCHECK_CACHE.get(METADATA_KEY);
-  const metadata = metadataRaw ? (JSON.parse(metadataRaw) as IngestMetadata) : null;
+  let metadata: IngestMetadata | null = null;
+  if (metadataRaw) {
+    try {
+      metadata = JSON.parse(metadataRaw) as IngestMetadata;
+    } catch {
+      console.warn('[status] Failed to parse metadata from cache');
+    }
+  }
 
   const response: RetractionStatusResponse = {
     doi,
@@ -181,11 +224,18 @@ async function fetchStatus(env: Env, doi: string): Promise<RetractionStatusRespo
       datasetVersion: metadata?.tableName,
       updatedAt: metadata?.updatedAt,
     },
-    records: rows.results.map((row) => ({
-      recordId: row.record_id,
-      raw: JSON.parse(row.raw) as Record<string, string>,
-      updatedAt: row.updated_at,
-    })),
+    records: rows.results.flatMap((row) => {
+      try {
+        return [{
+          recordId: row.record_id,
+          raw: JSON.parse(row.raw) as Record<string, string>,
+          updatedAt: row.updated_at,
+        }];
+      } catch {
+        console.warn(`[status] Failed to parse raw JSON for record ${row.record_id}`);
+        return []; // Skip malformed records
+      }
+    }),
   };
 
   await toCache(env.RETRACTCHECK_CACHE, cacheKey, response);
@@ -195,17 +245,39 @@ async function fetchStatus(env: Env, doi: string): Promise<RetractionStatusRespo
 function handleOptions(): Response {
   return new Response(null, {
     status: 204,
-    headers: CORS_HEADERS,
+    headers: STANDARD_HEADERS,
+  });
+}
+
+/**
+ * Build a JSON response with optional HEAD support.
+ * HEAD returns same headers but empty body per HTTP spec.
+ */
+function jsonResponse(
+  body: Record<string, unknown>,
+  options: { status?: number; headers?: Record<string, string>; isHead?: boolean } = {}
+): Response {
+  const { status = 200, headers = {}, isHead = false } = options;
+  const jsonBody = JSON.stringify(body);
+  return new Response(isHead ? null : jsonBody, {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': String(new TextEncoder().encode(jsonBody).length),
+      ...STANDARD_HEADERS,
+      ...headers,
+    },
   });
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/v1/ingest") {
+      if (request.method === "OPTIONS") return handleOptions();
       if (request.method !== "POST") {
-        return jsonErrorResponse("Method Not Allowed", 405);
+        return methodNotAllowedResponse(['POST', 'OPTIONS']);
       }
 
       if (!env.INGEST_TOKEN) {
@@ -221,14 +293,21 @@ export default {
       try {
         const stats = await runIngest(env);
         return new Response(JSON.stringify({ ok: true, stats }), {
-          headers: { "Content-Type": "application/json" },
+          status: 201,
+          headers: {
+            "Content-Type": "application/json",
+            ...STANDARD_HEADERS,
+          },
         });
       } catch (err) {
         return new Response(
           JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }),
           {
             status: 500,
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...STANDARD_HEADERS,
+            },
           },
         );
       }
@@ -237,7 +316,7 @@ export default {
     if (url.pathname === "/v1/override") {
       if (request.method === "OPTIONS") return handleOptions();
       if (request.method !== "POST") {
-        return jsonErrorResponse("Method Not Allowed", 405);
+        return methodNotAllowedResponse(['POST', 'OPTIONS']);
       }
 
       // Check request body size before parsing
@@ -246,9 +325,14 @@ export default {
         return jsonErrorResponse("Request body too large", 413);
       }
 
+      let body: Record<string, unknown>;
       try {
-        const body = (await request.json()) as Record<string, unknown>;
+        body = (await request.json()) as Record<string, unknown>;
+      } catch {
+        return jsonErrorResponse("Invalid JSON body", 400);
+      }
 
+      try {
         // Validate and truncate fields to prevent abuse
         const host = typeof body.host === 'string'
           ? body.host.toLowerCase().slice(0, MAX_HOST_LENGTH)
@@ -256,18 +340,21 @@ export default {
         const doi = typeof body.doi === 'string'
           ? body.doi.trim().toLowerCase().slice(0, MAX_DOI_LENGTH)
           : undefined;
-        const targetUrl = typeof body.url === 'string'
-          ? body.url.slice(0, MAX_URL_LENGTH)
-          : undefined;
+
+        // Strip query params and fragments from URL to avoid storing session tokens or PII
+        let sanitizedUrl: string | undefined;
+        if (typeof body.url === 'string') {
+          try {
+            const parsed = new URL(body.url);
+            sanitizedUrl = `${parsed.origin}${parsed.pathname}`.slice(0, MAX_URL_LENGTH);
+          } catch {
+            // If URL parsing fails, just truncate and store without query params
+            sanitizedUrl = body.url.split('?')[0].split('#')[0].slice(0, MAX_URL_LENGTH);
+          }
+        }
 
         if (!host) {
-          return new Response(JSON.stringify({ ok: false, error: 'Invalid host' }), {
-            status: 400,
-            headers: {
-              'Content-Type': 'application/json',
-              ...CORS_HEADERS,
-            },
-          });
+          return jsonErrorResponse('Invalid host', 400);
         }
 
         const clientId = normalizeClientId(request.headers.get('X-RetractCheck-Client'));
@@ -278,56 +365,63 @@ export default {
           return quotaExceededResponse('override', quota);
         }
 
+        // Note: User-Agent intentionally omitted to avoid storing PII
         const event = {
           host,
-          url: targetUrl,
+          url: sanitizedUrl,
           doi,
           triggeredAt: new Date().toISOString(),
-          userAgent: request.headers.get('User-Agent') || undefined,
           clientId,
         } satisfies OverrideEvent;
 
         await storeOverrideEvent(env.RETRACTCHECK_CACHE, event);
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
-          },
-        });
+
+        // Send Telegram notification (fire-and-forget)
+        if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+          ctx.waitUntil(
+            fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: env.TELEGRAM_CHAT_ID,
+                text: `🔔 Host Request\n\nHost: ${host}\nURL: ${sanitizedUrl || 'N/A'}\nDOI: ${doi || 'N/A'}`,
+              }),
+            }).catch(() => {/* ignore notification failures */})
+          );
+        }
+
+        return jsonResponse({ ok: true }, { status: 201, headers: rateLimitHeaders(quota) });
       } catch (error) {
         console.error('[override] failed', error);
-        return new Response(JSON.stringify({ ok: false, error: 'Unable to record override' }), {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
-          },
-        });
+        return jsonErrorResponse('Unable to record override', 500);
       }
     }
 
     if (request.method === "OPTIONS") return handleOptions();
-    if (request.method !== "GET") {
-      return jsonErrorResponse("Method Not Allowed", 405);
+    const isHead = request.method === "HEAD";
+    if (request.method !== "GET" && !isHead) {
+      return methodNotAllowedResponse(['GET', 'HEAD', 'OPTIONS']);
     }
 
     if (url.pathname === "/v1/health") {
       const activeTable = await getActiveTableName(env.RETRACTCHECK_CACHE);
-      return new Response(JSON.stringify({
+      return jsonResponse({
         ok: true,
         activeTable: activeTable || LEGACY_TABLE_NAME,
         usingLegacy: !activeTable,
-      }), {
-        headers: {
-          "Content-Type": "application/json",
-          ...CORS_HEADERS,
-        },
-      });
+      }, { isHead });
     }
 
     if (url.pathname === "/v1/info") {
       const metadataRaw = await env.RETRACTCHECK_CACHE.get(METADATA_KEY);
-      const metadata = metadataRaw ? (JSON.parse(metadataRaw) as IngestMetadata) : null;
+      let metadata: IngestMetadata | null = null;
+      if (metadataRaw) {
+        try {
+          metadata = JSON.parse(metadataRaw) as IngestMetadata;
+        } catch {
+          console.warn('[info] Failed to parse metadata from cache');
+        }
+      }
 
       // Calculate staleness
       let stale = true; // Assume stale if no metadata
@@ -349,14 +443,10 @@ export default {
       };
 
       // Return 503 if stale so external monitors can detect it
-      return new Response(JSON.stringify(responseBody), {
+      return jsonResponse(responseBody, {
         status: stale ? 503 : 200,
-        headers: {
-          "Content-Type": "application/json",
-          ...CORS_HEADERS,
-          // Cache for 5 minutes to avoid hammering the endpoint
-          "Cache-Control": "public, max-age=300",
-        },
+        headers: { 'Cache-Control': 'public, max-age=300' },
+        isHead,
       });
     }
 
@@ -370,7 +460,7 @@ export default {
 
       const doi = normaliseDoi(raw);
       if (!raw || !doi) {
-        return buildResponse({ doi: raw ?? '', meta: {}, records: [] });
+        return buildResponse({ doi: raw ?? '', meta: {}, records: [] }, isHead);
       }
 
       const clientId = normalizeClientId(request.headers.get('X-RetractCheck-Client'));
@@ -383,7 +473,7 @@ export default {
 
       try {
         const status = await fetchStatus(env, doi);
-        return buildResponse(status);
+        return buildResponse(status, isHead, rateLimitHeaders(quota));
       } catch (err) {
         console.error("status lookup failed", err);
         return jsonErrorResponse("Internal Error", 500);
@@ -503,7 +593,9 @@ function getRequestIp(request: Request): string {
   return 'unknown';
 }
 
-type QuotaResult = { ok: true } | { ok: false; retryAfterSeconds: number; scope: RateLimitScope };
+type QuotaResult =
+  | { ok: true; limit: number; remaining: number; resetSeconds: number }
+  | { ok: false; limit: number; remaining: 0; resetSeconds: number; scope: RateLimitScope };
 
 async function enforceQuota(
   cache: KVNamespace,
@@ -515,22 +607,24 @@ async function enforceQuota(
   const nowSeconds = Math.floor(Date.now() / 1000);
   const windowSeconds = config.windowSeconds;
   const bucketStart = Math.floor(nowSeconds / windowSeconds) * windowSeconds;
+  const resetSeconds = Math.max(1, (bucketStart + windowSeconds) - nowSeconds);
 
   const clientKey = `${QUOTA_PREFIX}:${type}:client:${clientId}:${bucketStart}`;
-  const clientResult = await incrementCounter(cache, clientKey, config.limit, windowSeconds, bucketStart, nowSeconds);
+  const clientResult = await incrementCounter(cache, clientKey, config.limit, windowSeconds);
   if (!clientResult.allowed) {
-    return { ok: false, retryAfterSeconds: clientResult.retryAfterSeconds, scope: 'client' };
+    return { ok: false, limit: config.limit, remaining: 0, resetSeconds, scope: 'client' };
   }
 
   if (config.ipLimit) {
     const ipKey = `${QUOTA_PREFIX}:${type}:ip:${ip}:${bucketStart}`;
-    const ipResult = await incrementCounter(cache, ipKey, config.ipLimit, windowSeconds, bucketStart, nowSeconds);
+    const ipResult = await incrementCounter(cache, ipKey, config.ipLimit, windowSeconds);
     if (!ipResult.allowed) {
-      return { ok: false, retryAfterSeconds: ipResult.retryAfterSeconds, scope: 'ip' };
+      return { ok: false, limit: config.ipLimit, remaining: 0, resetSeconds, scope: 'ip' };
     }
   }
 
-  return { ok: true };
+  const remaining = Math.max(0, config.limit - clientResult.currentCount);
+  return { ok: true, limit: config.limit, remaining, resetSeconds };
 }
 
 /**
@@ -548,21 +642,17 @@ async function incrementCounter(
   key: string,
   limit: number,
   windowSeconds: number,
-  bucketStart: number,
-  nowSeconds: number,
-): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
+): Promise<{ allowed: boolean; currentCount: number }> {
   const raw = await cache.get(key);
   const current = raw ? Number(raw) : 0;
-  const bucketEnd = bucketStart + windowSeconds;
-  const retryAfterSeconds = Math.max(1, bucketEnd - nowSeconds);
 
   if (Number.isFinite(current) && current >= limit) {
-    return { allowed: false, retryAfterSeconds };
+    return { allowed: false, currentCount: current };
   }
 
   const next = Number.isFinite(current) ? current + 1 : 1;
   await cache.put(key, String(next), { expirationTtl: windowSeconds });
-  return { allowed: true, retryAfterSeconds };
+  return { allowed: true, currentCount: next };
 }
 
 const RATE_LIMIT_RESPONSE_MESSAGES: Record<RateLimitType, string> = {
@@ -571,24 +661,37 @@ const RATE_LIMIT_RESPONSE_MESSAGES: Record<RateLimitType, string> = {
 };
 
 function quotaExceededResponse(type: RateLimitType, result: Extract<QuotaResult, { ok: false }>): Response {
-  const retryAfter = Math.max(1, Math.ceil(result.retryAfterSeconds));
   return new Response(
     JSON.stringify({
       ok: false,
       error: RATE_LIMIT_RESPONSE_MESSAGES[type],
       type,
       scope: result.scope,
-      retryAfter,
+      retryAfter: result.resetSeconds,
     }),
     {
       status: 429,
       headers: {
         'Content-Type': 'application/json',
-        ...CORS_HEADERS,
-        'Retry-After': String(retryAfter),
+        ...STANDARD_HEADERS,
+        'Retry-After': String(result.resetSeconds),
+        'X-RateLimit-Limit': String(result.limit),
+        'X-RateLimit-Remaining': '0',
+        'X-RateLimit-Reset': String(result.resetSeconds),
       },
     },
   );
+}
+
+/**
+ * Generate rate limit headers for successful responses
+ */
+function rateLimitHeaders(quota: Extract<QuotaResult, { ok: true }>): Record<string, string> {
+  return {
+    'X-RateLimit-Limit': String(quota.limit),
+    'X-RateLimit-Remaining': String(quota.remaining),
+    'X-RateLimit-Reset': String(quota.resetSeconds),
+  };
 }
 
 async function handleCron(
@@ -640,7 +743,6 @@ type OverrideEvent = {
   url?: string;
   doi?: string;
   triggeredAt: string;
-  userAgent?: string;
   clientId?: string;
 };
 

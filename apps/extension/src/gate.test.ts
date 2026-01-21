@@ -19,7 +19,6 @@ Object.defineProperty(globalThis, 'location', {
 
 import {
   hookSpaNavigation,
-  inHostAllowList,
   isSupportedLocation,
   looksArticleLike,
   shouldActivate,
@@ -33,15 +32,15 @@ function buildDocument(html: string): Document {
   return doc;
 }
 
-describe('inHostAllowList', () => {
+describe('isSupportedLocation', () => {
   it('matches known scholarly domains', () => {
     const url = new URL('https://www.nature.com/articles/123');
-    expect(inHostAllowList(url as unknown as Location)).toBe(true);
+    expect(isSupportedLocation(url as unknown as Location)).toBe(true);
   });
 
   it('rejects unrelated hosts', () => {
     const url = new URL('https://example.com/post');
-    expect(inHostAllowList(url as unknown as Location)).toBe(false);
+    expect(isSupportedLocation(url as unknown as Location)).toBe(false);
   });
 });
 
@@ -73,13 +72,6 @@ describe('shouldActivate', () => {
     });
     expect(shouldActivate(buildDocument('<p/>'))).toBe(true);
     delete (globalThis as unknown as Record<string, unknown>).location;
-  });
-});
-
-describe('isSupportedLocation', () => {
-  it('returns false for unsupported domains', () => {
-    const url = new URL('https://example.com/post');
-    expect(isSupportedLocation(url as unknown as Location)).toBe(false);
   });
 });
 
