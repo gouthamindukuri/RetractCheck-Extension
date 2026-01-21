@@ -25,7 +25,7 @@ cp .env.example .env
 Edit `.env` and set your worker URL:
 
 ```
-RETRACTCHECK_WORKER_URL=https://retractcheck-worker.i-gouthamvarma.workers.dev
+RETRACTCHECK_WORKER_URL=https://your-worker.workers.dev
 ```
 
 Build everything:
