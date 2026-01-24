@@ -56,6 +56,22 @@ const ICONS = {
   </svg>`,
 };
 
+// Safely set SVG content using DOMParser
+function setSvgContent(element: HTMLElement, svgString: string): void {
+  element.replaceChildren();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgString.trim(), 'image/svg+xml');
+  const svg = doc.documentElement;
+  if (svg && svg.nodeName === 'svg') {
+    element.appendChild(element.ownerDocument.importNode(svg, true));
+  }
+}
+
+// Clear all children from an element
+function clearChildren(element: HTMLElement): void {
+  element.replaceChildren();
+}
+
 // DOM Elements
 const toggleEl = document.getElementById('toggle') as HTMLInputElement;
 const doiValueEl = document.getElementById('doi-value') as HTMLElement;
@@ -180,16 +196,16 @@ function renderDoi(doi: string | null): void {
     copyButton.type = 'button';
     copyButton.className = 'doi-copy-btn';
     copyButton.setAttribute('aria-label', 'Copy DOI');
-    copyButton.innerHTML = ICONS.copy;
+    setSvgContent(copyButton, ICONS.copy);
     doiValueEl.appendChild(copyButton);
 
     copyButton.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(doi);
-        copyButton!.innerHTML = ICONS.check;
+        setSvgContent(copyButton!, ICONS.check);
         copyButton!.classList.add('doi-copy-btn--success');
         setTimeout(() => {
-          copyButton!.innerHTML = ICONS.copy;
+          setSvgContent(copyButton!, ICONS.copy);
           copyButton!.classList.remove('doi-copy-btn--success');
         }, 1500);
       } catch (error) {
@@ -201,7 +217,7 @@ function renderDoi(doi: string | null): void {
 
 function showStatusHero(variant: 'clear' | 'muted' | 'warning', icon: string, label: string, meta?: string): void {
   statusHeroEl.className = `status-hero status-hero--${variant}`;
-  statusIconEl.innerHTML = icon;
+  setSvgContent(statusIconEl, icon);
   statusLabelEl.textContent = label;
   statusMetaEl.textContent = meta || '';
   statusHeroEl.hidden = false;
@@ -210,7 +226,7 @@ function showStatusHero(variant: 'clear' | 'muted' | 'warning', icon: string, la
 }
 
 function showAlertBanner(count: number, meta?: string): void {
-  alertIconEl.innerHTML = ICONS.alertTriangle;
+  setSvgContent(alertIconEl, ICONS.alertTriangle);
   alertTextEl.textContent = count === 1 ? '1 Notice Found' : `${count} Notices Found`;
   alertMetaEl.textContent = meta ? `As of ${meta}` : '';
   alertBannerEl.hidden = false;
@@ -235,7 +251,7 @@ function renderRecords(response: RetractionStatusResponse): void {
   const { records, meta } = response;
   const freshness = formatDataFreshness(meta?.updatedAt);
 
-  noticesEl.innerHTML = '';
+  clearChildren(noticesEl);
 
   if (records.length === 0) {
     showStatusHero('clear', ICONS.shieldCheck, 'No Notices Found', freshness ? `Data as of ${freshness}` : '');
@@ -419,7 +435,13 @@ function createLinkElement(value?: string, prefix = '', text = 'View'): HTMLElem
   a.target = '_blank';
   a.rel = 'noreferrer noopener';
   a.className = 'notice-link';
-  a.innerHTML = `${text} ${ICONS.externalLink}`;
+  a.textContent = text + ' ';
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(ICONS.externalLink.trim(), 'image/svg+xml');
+  const svg = doc.documentElement;
+  if (svg && svg.nodeName === 'svg') {
+    a.appendChild(a.ownerDocument.importNode(svg, true));
+  }
   return a;
 }
 
@@ -427,7 +449,7 @@ function showLoading(): void {
   loadingEl.hidden = false;
   clearMessage();
   showStatusHero('muted', ICONS.info, 'Checking...', '');
-  noticesEl.innerHTML = '';
+  clearChildren(noticesEl);
   noticesEl.hidden = true;
 }
 
