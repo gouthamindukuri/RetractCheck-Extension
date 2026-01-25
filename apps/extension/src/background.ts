@@ -55,7 +55,6 @@ type CacheEntry = {
   doi: string;
   meta?: RetractionStatusResponse['meta'];
   records: RetractionStatusResponse['records'];
-  datasetVersion?: string;
   expiresAt: number;
 };
 
@@ -226,7 +225,6 @@ async function handleQuery(
       doi,
       meta: response.meta,
       records: response.records,
-      datasetVersion: response.meta?.datasetVersion,
       expiresAt: Date.now() + CACHE_TTL_MS,
     };
     await saveCache(cache);
@@ -271,8 +269,6 @@ async function fetchStatusFromWorker(doi: string, clientId: string): Promise<Ret
 }
 
 function isExpired(entry: CacheEntry): boolean {
-  if (!entry.datasetVersion) return Date.now() > entry.expiresAt;
-  if (entry.meta?.datasetVersion && entry.meta.datasetVersion !== entry.datasetVersion) return true;
   return Date.now() > entry.expiresAt;
 }
 
@@ -291,8 +287,19 @@ async function getCache(): Promise<Record<string, CacheEntry>> {
   return (stored[CACHE_KEY] as Record<string, CacheEntry> | undefined) ?? {};
 }
 
+/**
+ * Save cache after pruning expired entries to prevent unbounded growth.
+ * Chrome local storage has a 10MB limit; pruning keeps us well under.
+ */
 function saveCache(cache: Record<string, CacheEntry>): Promise<void> {
-  return chrome.storage.local.set({ [CACHE_KEY]: cache });
+  const now = Date.now();
+  const pruned: Record<string, CacheEntry> = {};
+  for (const [doi, entry] of Object.entries(cache)) {
+    if (entry.expiresAt > now) {
+      pruned[doi] = entry;
+    }
+  }
+  return chrome.storage.local.set({ [CACHE_KEY]: pruned });
 }
 
 const WORKER_ENDPOINT = __WORKER_ENDPOINT__;

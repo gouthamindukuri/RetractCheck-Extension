@@ -1,0 +1,35 @@
+---
+---
+
+<div class="flex items-center gap-3 text-sm text-text-muted">
+  <span class="relative flex h-2 w-2">
+    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+    <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+  </span>
+  <span id="status-text">Loading...</span>
+</div>
+
+<script>
+  async function fetchStatus() {
+    const statusEl = document.getElementById('status-text');
+    if (!statusEl) return;
+
+    try {
+      const res = await fetch('https://api.retractcheck.org/v1/info');
+      const data = await res.json();
+
+      if (data.ok) {
+        const count = data.rowCount.toLocaleString();
+        const hours = Math.round(data.dataAgeHours);
+        const timeText = hours < 1 ? 'just now' : hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+        statusEl.textContent = `${count} papers tracked · updated ${timeText}`;
+      } else {
+        statusEl.textContent = 'API available';
+      }
+    } catch {
+      statusEl.textContent = 'API available';
+    }
+  }
+
+  fetchStatus();
+</script>

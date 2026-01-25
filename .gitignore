@@ -47,3 +47,5 @@ CLAUDE.md
 # Screenshots / images
 *.png
 !apps/extension/public/icons/*.png
+
+store-assets/

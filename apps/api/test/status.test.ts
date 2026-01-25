@@ -55,7 +55,6 @@ describe('status handler', () => {
     expect(response.status).toBe(200);
     const json = await response.json();
     expect(json.records).toHaveLength(1);
-    expect(json.meta.datasetVersion).toBe('entries_20250101000000');
     expect(json.meta.updatedAt).toBe('2025-01-01T00:00:00.000Z');
   });
 

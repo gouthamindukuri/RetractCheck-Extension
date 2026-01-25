@@ -597,36 +597,7 @@ async function getActiveTabContext(
       };
     }
   } catch (err) {
-    console.warn('[RetractCheck] message fallback to scripting', err);
-  }
-
-  try {
-    type RetractCheckWindow = Window & {
-      __RETRACTCHECK_DOI?: string | null;
-      __RETRACTCHECK_SUPPORTED?: boolean;
-      __RETRACTCHECK_HOST?: string | null;
-    };
-    const results = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        const w = window as RetractCheckWindow;
-        return {
-          doi: w.__RETRACTCHECK_DOI ?? null,
-          supported: w.__RETRACTCHECK_SUPPORTED !== false,
-          host: w.__RETRACTCHECK_HOST ?? null,
-        };
-      },
-      world: 'MAIN',
-    });
-    const fallback = results[0]?.result as { doi: string | null; supported?: boolean; host?: string } | undefined;
-    return {
-      doi: fallback?.doi ?? null,
-      supported: fallback?.supported !== false,
-      host: fallback?.host ?? host,
-      url,
-    };
-  } catch (err) {
-    console.error('[RetractCheck] executeScript error', err);
+    console.warn('[RetractCheck] content script communication failed', err);
     return { doi: null, supported: true, host, url };
   }
 }

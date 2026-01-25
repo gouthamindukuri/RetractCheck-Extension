@@ -21,5 +21,15 @@ describe('normaliseDoi', () => {
   it('delegates to cleanDoi', () => {
     expect(normaliseDoi('https://doi.org/10.1000/abc')).toBe('10.1000/abc');
   });
+
+  it('rejects inputs longer than 500 characters', () => {
+    const longInput = '10.1000/' + 'a'.repeat(500);
+    expect(normaliseDoi(longInput)).toBeNull();
+  });
+
+  it('accepts inputs at the 500 character limit', () => {
+    const exactLimit = '10.1000/' + 'a'.repeat(492); // 8 + 492 = 500
+    expect(normaliseDoi(exactLimit)).toBe(exactLimit.toLowerCase());
+  });
 });
 

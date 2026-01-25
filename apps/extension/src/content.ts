@@ -3,29 +3,26 @@ import { extractPrimaryDoi } from '@retractcheck/doi';
 import { OVERRIDES_KEY } from './constants';
 import { shouldActivate, hookSpaNavigation, isSupportedLocation } from './gate';
 
-declare global {
-  interface Window {
-    __RETRACTCHECK_DOI?: string | null;
-    __RETRACTCHECK_SUPPORTED?: boolean;
-    __RETRACTCHECK_HOST?: string | null;
-  }
-}
+// Internal state - not exposed to page context
+let currentDoi: string | null = null;
+let currentSupported = false;
+let currentHost: string | null = null;
 
 let lastUrl = '';
 let runDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function run(force = false) {
   const host = location.hostname?.toLowerCase() ?? '';
-  window.__RETRACTCHECK_HOST = host || null;
+  currentHost = host || null;
 
   let supported = isSupportedLocation();
   if (!supported && host) {
     supported = await hasOverride(host);
   }
-  window.__RETRACTCHECK_SUPPORTED = supported;
+  currentSupported = supported;
 
   const doi = extractPrimaryDoi() || null;
-  window.__RETRACTCHECK_DOI = doi;
+  currentDoi = doi;
 
   if (!force && location.href === lastUrl) return;
   lastUrl = location.href;
@@ -75,9 +72,9 @@ window.addEventListener('pagehide', () => {
 chrome.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'retractcheck:get-doi') {
     sendResponse({
-      doi: window.__RETRACTCHECK_DOI ?? null,
-      supported: window.__RETRACTCHECK_SUPPORTED !== false,
-      host: window.__RETRACTCHECK_HOST ?? null,
+      doi: currentDoi,
+      supported: currentSupported,
+      host: currentHost,
     });
   }
 

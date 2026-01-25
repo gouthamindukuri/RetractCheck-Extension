@@ -1,54 +1,59 @@
 /**
- * Known fields from the Retraction Watch CSV database.
- * All fields are optional as the CSV schema may change.
+ * All fields from the Retraction Watch CSV database.
  * @see https://gitlab.com/crossref/retraction-watch-data
  */
 export interface RetractionWatchFields {
-  /** Type of notice: "Retraction", "Correction", "Expression of Concern", etc. */
-  RetractionNature?: string;
-  /** Reason(s) for the retraction, semicolon-separated */
-  Reason?: string;
+  /** Unique identifier in the Retraction Watch database */
+  'Record ID'?: string;
   /** Title of the original paper */
   Title?: string;
-  /** Type of article: "Research Article", "Review", etc. */
-  ArticleType?: string;
-  /** Date the retraction notice was published (YYYY-MM-DD) */
-  RetractionDate?: string;
-  /** Additional notes about the retraction */
-  Notes?: string;
-  /** DOI of the retraction notice */
-  RetractionDOI?: string;
-  /** DOI of the original paper */
-  OriginalPaperDOI?: string;
-  /** PubMed ID of the retraction notice */
-  RetractionPubMedID?: string;
-  /** PubMed ID of the original paper */
-  OriginalPaperPubMedID?: string;
+  /** Subject area(s), semicolon-separated */
+  Subject?: string;
+  /** Institution name(s) */
+  Institution?: string;
   /** Journal name */
   Journal?: string;
   /** Publisher name */
   Publisher?: string;
   /** Country of the institution */
   Country?: string;
-  /** Author names */
+  /** Author names, semicolon-separated */
   Author?: string;
-  /** Institution name */
-  Institution?: string;
-  /** Allow additional unknown fields from CSV */
-  [key: string]: string | undefined;
+  /** Related URLs (Retraction Watch articles, etc.) */
+  URLS?: string;
+  /** Type of article: "Research Article", "Review", "Clinical Study", etc. */
+  ArticleType?: string;
+  /** Date the retraction notice was published */
+  RetractionDate?: string;
+  /** DOI of the retraction notice */
+  RetractionDOI?: string;
+  /** PubMed ID of the retraction notice */
+  RetractionPubMedID?: string;
+  /** Date the original paper was published */
+  OriginalPaperDate?: string;
+  /** DOI of the original paper */
+  OriginalPaperDOI?: string;
+  /** PubMed ID of the original paper */
+  OriginalPaperPubMedID?: string;
+  /** Type of notice: "Retraction", "Correction", "Expression of Concern", etc. */
+  RetractionNature?: string;
+  /** Reason(s) for the retraction, semicolon-separated */
+  Reason?: string;
+  /** Whether the paper is paywalled: "Yes" or "No" */
+  Paywalled?: string;
+  /** Additional notes about the retraction */
+  Notes?: string;
 }
 
 export interface RetractionRecord {
   recordId: number;
-  /** Raw fields from Retraction Watch CSV */
+  /** Fields from Retraction Watch CSV */
   raw: RetractionWatchFields;
-  updatedAt: number;
 }
 
 export interface RetractionStatusResponse {
   doi: string;
   meta: {
-    datasetVersion?: string;
     updatedAt?: string;
   };
   records: RetractionRecord[];
@@ -64,4 +69,3 @@ export interface RateLimitInfo {
   type: 'status' | 'override';
   retryAt: number;
 }
-

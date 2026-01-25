@@ -221,7 +221,6 @@ async function fetchStatus(env: Env, doi: string): Promise<RetractionStatusRespo
   const response: RetractionStatusResponse = {
     doi,
     meta: {
-      datasetVersion: metadata?.tableName,
       updatedAt: metadata?.updatedAt,
     },
     records: rows.results.flatMap((row) => {
@@ -229,7 +228,6 @@ async function fetchStatus(env: Env, doi: string): Promise<RetractionStatusRespo
         return [{
           recordId: row.record_id,
           raw: JSON.parse(row.raw) as Record<string, string>,
-          updatedAt: row.updated_at,
         }];
       } catch {
         console.warn(`[status] Failed to parse raw JSON for record ${row.record_id}`);
@@ -293,15 +291,17 @@ export default {
       try {
         const stats = await runIngest(env);
         return new Response(JSON.stringify({ ok: true, stats }), {
-          status: 201,
+          status: 200,
           headers: {
             "Content-Type": "application/json",
             ...STANDARD_HEADERS,
           },
         });
       } catch (err) {
+        // Log full error internally, return generic message to client
+        console.error('[ingest] failed:', err);
         return new Response(
-          JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+          JSON.stringify({ ok: false, error: 'Ingest failed' }),
           {
             status: 500,
             headers: {
@@ -404,12 +404,29 @@ export default {
     }
 
     if (url.pathname === "/v1/health") {
-      const activeTable = await getActiveTableName(env.RETRACTCHECK_CACHE);
-      return jsonResponse({
-        ok: true,
-        activeTable: activeTable || LEGACY_TABLE_NAME,
-        usingLegacy: !activeTable,
-      }, { isHead });
+      // Actually verify database and cache connectivity
+      try {
+        const activeTable = await getActiveTableName(env.RETRACTCHECK_CACHE);
+        if (!activeTable) {
+          return jsonResponse({ ok: false, error: 'No active table' }, { status: 503, isHead });
+        }
+        // Validate table name format to prevent SQL injection
+        if (!/^entries(_\d{14})?$/.test(activeTable)) {
+          console.error('[health] Invalid table name format:', activeTable);
+          return jsonResponse({ ok: false }, { status: 503, isHead });
+        }
+        // Verify table exists with a lightweight query
+        const check = await env.RETRACTCHECK_DB.prepare(
+          `SELECT 1 FROM ${activeTable} LIMIT 1`
+        ).first();
+        if (check === null) {
+          return jsonResponse({ ok: false, error: 'Table empty or missing' }, { status: 503, isHead });
+        }
+        return jsonResponse({ ok: true }, { isHead });
+      } catch (err) {
+        console.error('[health] check failed', err);
+        return jsonResponse({ ok: false }, { status: 503, isHead });
+      }
     }
 
     if (url.pathname === "/v1/info") {
@@ -722,14 +739,14 @@ async function handleCron(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     const errorStack = err instanceof Error ? err.stack : undefined;
+    // Log full details internally only
     console.error('[ingest] failed', err);
+    if (errorStack) {
+      console.error('[ingest] stack:', errorStack);
+    }
 
-    // Signal failure with error details
-    const failureReport = [
-      `Ingest failed`,
-      `Error: ${errorMessage}`,
-      errorStack ? `Stack: ${errorStack}` : null,
-    ].filter(Boolean).join('\n');
+    // Send only error message to external service (no stack traces)
+    const failureReport = `Ingest failed: ${errorMessage}`;
 
     await pingHealthcheck(pingUrl, 'fail', failureReport);
 

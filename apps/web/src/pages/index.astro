@@ -1,0 +1,41 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import StatsBar from '../components/StatsBar.astro';
+import Install from '../components/Install.astro';
+import Api from '../components/Api.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<Base>
+  <div class="min-h-screen flex flex-col">
+    <Header />
+
+    <main class="flex-1">
+      <!-- Hero -->
+      <section class="max-w-3xl mx-auto px-6 py-20 space-y-8">
+        <div class="space-y-4">
+          <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight leading-tight">
+            Check if a research paper<br />has any notices.
+          </h1>
+          <p class="text-text-muted text-lg max-w-xl">
+            Retractions, corrections, expressions of concern — all from the <a href="https://retractionwatch.com/" target="_blank" rel="noopener noreferrer" class="text-text hover:underline">Retraction Watch</a> database.
+          </p>
+        </div>
+
+        <Install />
+
+        <StatsBar />
+      </section>
+
+      <!-- API Section -->
+      <section class="border-t border-border">
+        <div class="max-w-3xl mx-auto px-6 py-16">
+          <Api />
+        </div>
+      </section>
+    </main>
+
+    <Footer />
+  </div>
+</Base>

@@ -1,0 +1,117 @@
+---
+---
+
+<table class="border border-border text-sm border-collapse">
+  <!-- Status Row -->
+  <tr class="border-b border-border">
+    <td class="px-3 py-2 text-text-muted border-r border-border">Status</td>
+    <td class="px-3 py-2">
+      <a
+        href="https://retractcheck.instatus.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="flex items-center gap-2 hover:text-text transition-colors"
+      >
+        <span id="statsbar-status-dot" class="relative flex h-2 w-2">
+          <span id="statsbar-dot-ping" class="absolute inline-flex h-full w-full rounded-full bg-text-muted opacity-75"></span>
+          <span id="statsbar-dot-solid" class="relative inline-flex rounded-full h-2 w-2 bg-text-muted"></span>
+        </span>
+        <span id="statsbar-status-text">Checking...</span>
+        <svg class="w-3 h-3 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </a>
+    </td>
+  </tr>
+
+  <!-- Stats Row -->
+  <tr class="border-b border-border">
+    <td class="px-3 py-2 text-text-muted border-r border-border">Stats</td>
+    <td class="px-3 py-2">
+      <a
+        href="https://retractionwatch.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="flex items-center gap-2 hover:text-text transition-colors"
+      >
+        <span id="statsbar-database-text">Loading...</span>
+        <svg class="w-3 h-3 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </a>
+    </td>
+  </tr>
+
+  <!-- Sync Row -->
+  <tr>
+    <td class="px-3 py-2 text-text-muted border-r border-border">Sync</td>
+    <td class="px-3 py-2" id="statsbar-updated-text">Loading...</td>
+  </tr>
+</table>
+
+<script>
+  interface InstatusData {
+    page?: {
+      status?: 'UP' | 'HASISSUES' | 'UNDERMAINTENANCE';
+    };
+  }
+
+  interface ApiInfoData {
+    ok: boolean;
+    rowCount: number;
+    dataAgeHours: number;
+  }
+
+  async function fetchStats() {
+    const dotPing = document.getElementById('statsbar-dot-ping');
+    const dotSolid = document.getElementById('statsbar-dot-solid');
+    const statusText = document.getElementById('statsbar-status-text');
+    const databaseText = document.getElementById('statsbar-database-text');
+    const updatedText = document.getElementById('statsbar-updated-text');
+
+    if (!dotPing || !dotSolid || !statusText || !databaseText || !updatedText) return;
+
+    // Fetch both APIs in parallel
+    const [instatusResult, apiResult] = await Promise.allSettled([
+      fetch('https://retractcheck.instatus.com/summary.json').then(r => r.json() as Promise<InstatusData>),
+      fetch('https://api.retractcheck.org/v1/info').then(r => r.json() as Promise<ApiInfoData>)
+    ]);
+
+    // Handle Instatus result
+    const instatusData = instatusResult.status === 'fulfilled' ? instatusResult.value : null;
+    const status = instatusData?.page?.status;
+
+    if (status === 'UP') {
+      dotPing.className = 'absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75 animate-ping';
+      dotSolid.className = 'relative inline-flex rounded-full h-2 w-2 bg-green-500';
+      statusText.textContent = 'All Systems Operational';
+    } else if (status === 'HASISSUES') {
+      dotPing.className = 'absolute inline-flex h-full w-full rounded-full bg-orange-500 opacity-75';
+      dotSolid.className = 'relative inline-flex rounded-full h-2 w-2 bg-orange-500';
+      statusText.textContent = 'Experiencing Issues';
+    } else if (status === 'UNDERMAINTENANCE') {
+      dotPing.className = 'absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75';
+      dotSolid.className = 'relative inline-flex rounded-full h-2 w-2 bg-blue-500';
+      statusText.textContent = 'Under Maintenance';
+    } else {
+      statusText.textContent = 'Status Unknown';
+    }
+
+    // Handle API result
+    const apiData = apiResult.status === 'fulfilled' && apiResult.value.ok ? apiResult.value : null;
+
+    if (apiData) {
+      const count = apiData.rowCount.toLocaleString();
+      databaseText.textContent = `${count} papers tracked`;
+
+      const hours = Math.round(apiData.dataAgeHours);
+      const timeText = hours < 1 ? 'Just now' : hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+      updatedText.textContent = timeText;
+    } else {
+      databaseText.textContent = 'Retraction Watch Database';
+      updatedText.textContent = 'Recently';
+    }
+  }
+
+  fetchStats();
+</script>

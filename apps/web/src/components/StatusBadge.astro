@@ -1,0 +1,50 @@
+---
+---
+
+<a
+  href="https://retractcheck.instatus.com"
+  target="_blank"
+  rel="noopener noreferrer"
+  id="status-badge"
+  class="inline-flex items-center gap-2 text-sm text-text-muted hover:text-text transition-colors"
+>
+  <span id="status-dot" class="relative flex h-2 w-2">
+    <span id="dot-ping" class="absolute inline-flex h-full w-full rounded-full bg-text-muted opacity-75"></span>
+    <span id="dot-solid" class="relative inline-flex rounded-full h-2 w-2 bg-text-muted"></span>
+  </span>
+  <span id="status-text">Checking status...</span>
+</a>
+
+<script>
+  async function fetchStatus() {
+    const dotPing = document.getElementById('dot-ping');
+    const dotSolid = document.getElementById('dot-solid');
+    const text = document.getElementById('status-text');
+    if (!dotPing || !dotSolid || !text) return;
+
+    try {
+      const res = await fetch('https://retractcheck.instatus.com/summary.json');
+      const data = await res.json();
+
+      const status = data.page?.status;
+
+      if (status === 'UP') {
+        dotPing.className = 'absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75 animate-ping';
+        dotSolid.className = 'relative inline-flex rounded-full h-2 w-2 bg-green-500';
+        text.textContent = 'All systems operational';
+      } else if (status === 'HASISSUES') {
+        dotPing.className = 'absolute inline-flex h-full w-full rounded-full bg-orange-500 opacity-75';
+        dotSolid.className = 'relative inline-flex rounded-full h-2 w-2 bg-orange-500';
+        text.textContent = 'Experiencing issues';
+      } else if (status === 'UNDERMAINTENANCE') {
+        dotPing.className = 'absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75';
+        dotSolid.className = 'relative inline-flex rounded-full h-2 w-2 bg-blue-500';
+        text.textContent = 'Under maintenance';
+      }
+    } catch {
+      text.textContent = 'Status';
+    }
+  }
+
+  fetchStatus();
+</script>
